@@ -1,5 +1,6 @@
 package org.example.routes;
 
+import io.vertx.core.Future;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.Router;
 import io.vertx.ext.web.RoutingContext;
@@ -8,9 +9,12 @@ import io.vertx.ext.web.handler.TimeoutHandler;
 import org.example.database.DiscoveryQuery;
 import org.example.utils.Config;
 
+import java.sql.Timestamp;
+import java.time.Instant;
 import java.util.Optional;
 
 import static org.example.Bootstrap.client;
+import static org.example.Bootstrap.vertx;
 
 public class Discovery
 {
@@ -41,6 +45,10 @@ public class Discovery
             discoveryRouter.delete("/delete")
                     .handler(TimeoutHandler.create(5000))
                     .handler(this::delete);
+
+            discoveryRouter.post("/:id/run")
+                            .handler(TimeoutHandler.create(5000))
+                                    .handler(this::discover);
 
             discoveryRouter.get("/notfound").handler(ctx->{
                 ctx.response().setStatusCode(500).end("No such request");
@@ -297,5 +305,92 @@ public class Discovery
 
     }
 
+    //Checking if device is up
+    private void discover(RoutingContext context)
+    {
+        try
+        {
+            var discoveryID = Long.parseLong(context.pathParam("id"));
 
+            System.out.println(discoveryID);
+
+            discoveryQuery.fetch(discoveryID)
+                    .compose(result->{
+                        var ip = result.getString("ip_address");
+
+                        var port = result.getInteger("port_number");
+
+                        return vertx.<JsonObject>executeBlocking(pingFuture->{
+                           try
+                           {
+                               var status = Config.ping(ip);
+
+                               if(status)
+                               {
+                                   pingFuture.complete(new JsonObject().put("ip",ip).put("port",port));
+                               }
+                               else
+                               {
+                                   pingFuture.fail("Device is down, ping failed");
+                               }
+
+                           }
+                           catch (Exception exception)
+                           {
+                               pingFuture.fail("Error during ping: "+exception.getMessage());
+                           }
+                        });
+                    })
+                    .compose(deviceInfo->{
+                        var ip = deviceInfo.getString("ip");
+
+                        var port = deviceInfo.getInteger("port");
+
+                        try
+                        {
+                            if (Config.isPortOpen(ip, port))
+                            {
+                                return Future.succeededFuture(deviceInfo.put("status","UP"));
+                            }
+                            else
+                            {
+                                return Future.failedFuture("Device is up but port is closed");
+                            }
+                        }
+                        catch (Exception exception)
+                        {
+                            return Future.failedFuture("Error during ping: "+exception.getMessage());
+                        }
+                    })
+                    .compose(deviceInfo->{
+                        var status = deviceInfo.getString("status");
+
+                        var timestamp = Timestamp.from(Instant.now());
+
+                        return discoveryQuery.updateStatus(discoveryID,status,timestamp)
+                                .compose(updateResult -> {
+                                    if (updateResult)
+                                    {
+                                        return Future.succeededFuture("Device is up, port is open, and status updated in database");
+                                    }
+                                    else {
+                                        return Future.failedFuture("Device is up, port is open , but failed to update the database");
+                                    }
+                                });
+                    })
+                    .onSuccess(finalResult->{
+                        context.response().setStatusCode(200).end(finalResult);
+                    })
+                    .onFailure(error->{
+                        context.response().setStatusCode(400).end(error.getMessage());
+                    });
+        }
+        catch (Exception exception)
+        {
+            System.out.println("Error in checking status of this ID : "+exception.getMessage());
+            context.response()
+                    .setStatusCode(500)
+                    .end("Server error: unable to process request");
+        }
+    }
 }

@@ -9,6 +9,8 @@ import io.vertx.sqlclient.RowSet;
 import io.vertx.sqlclient.SqlClient;
 import io.vertx.sqlclient.Tuple;
 
+import java.sql.Timestamp;
+
 public class DiscoveryQuery
 {
     private final SqlClient client;
@@ -174,6 +176,68 @@ public class DiscoveryQuery
             promise.fail("Error occurred while attempting to update: " + exception.getMessage());
         }
 
+        return promise.future();
+    }
+
+    public Future<JsonObject> fetch(Long id)
+    {
+        Promise<JsonObject> promise = Promise.promise();
+        try
+        {
+            client.preparedQuery("SELECT ip_address,port_number FROM discoveries WHERE long_id = ?")
+                    .execute(Tuple.of(id),result->{
+                       if(result.succeeded())
+                       {
+                            RowSet<Row> rows = result.result();
+
+                            if(rows.iterator().hasNext())
+                            {
+                                Row row = rows.iterator().next();
+                                promise.complete(new JsonObject()
+                                        .put("ip_address", row.getString("ip_address"))
+                                        .put("port_number", row.getInteger("port_number")));
+                            }
+                            else
+                            {
+                                promise.fail("No record found for this ID, please enter a valid ID");
+                            }
+                       }
+                       else
+                       {
+                           promise.fail("Failed to execute query to fetch ip and port address : "+result.cause().getMessage());
+                       }
+                    });
+        }
+        catch (Exception exception)
+        {
+            promise.fail("Error occurred while fetching ip address and port number : " + exception.getMessage());
+        }
+        return promise.future();
+
+    }
+
+    public Future<Boolean> updateStatus(Long id, String status, Timestamp timestamp)
+    {
+        Promise<Boolean> promise = Promise.promise();
+
+        try
+        {
+            client.preparedQuery("UPDATE discoveries SET status = ? , last_checked = ? WHERE long_id = ?")
+                    .execute(Tuple.of(status,timestamp,id),result->{
+                        if(result.succeeded())
+                        {
+                            promise.complete(true);
+                        }
+                        else
+                        {
+                            promise.fail("Failed to execute query : "+result.cause().getMessage());
+                        }
+                    });
+        }
+        catch (Exception exception)
+        {
+            promise.fail("Error occurred while fetching ip address and port number : " + exception.getMessage());
+        }
         return promise.future();
     }
 
