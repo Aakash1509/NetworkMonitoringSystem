@@ -1,24 +1,28 @@
 package org.example.routes;
 
 import io.vertx.core.Future;
+import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.Router;
 import io.vertx.ext.web.RoutingContext;
 import io.vertx.ext.web.handler.BodyHandler;
 import io.vertx.ext.web.handler.TimeoutHandler;
 import org.example.database.DiscoveryQuery;
+import org.example.model.Credential;
+import org.example.model.Discoveries;
+import org.example.utils.ApiResponse;
 import org.example.utils.Config;
 
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 
-import static org.example.Bootstrap.client;
 import static org.example.Bootstrap.vertx;
 
-public class Discovery
+public class Discovery implements CrudOperations
 {
-    private final DiscoveryQuery discoveryQuery = new DiscoveryQuery(client);
+    private final DiscoveryQuery discoveryQuery = new DiscoveryQuery();
 
     public void route(Router discoveryRouter)
     {
@@ -27,43 +31,34 @@ public class Discovery
             discoveryRouter.post("/create")
                     .handler(TimeoutHandler.create(5000))
                     .handler(BodyHandler.create())
-                    .handler(this::create);
+                    .handler(this::create)
+                    .failureHandler(this::timeout);
 
-            discoveryRouter.put("/update")
+            discoveryRouter.put("/:id")
                     .handler(TimeoutHandler.create(5000))
                     .handler(BodyHandler.create())
-                    .handler(this::update);
+                    .handler(this::update)
+                    .failureHandler(this::timeout);
 
             discoveryRouter.get("/getAll")
                     .handler(TimeoutHandler.create(5000))
-                    .handler(this::getAll);
+                    .handler(this::getAll)
+                    .failureHandler(this::timeout);
 
-            discoveryRouter.get("/get")
+            discoveryRouter.get("/:id")
                     .handler(TimeoutHandler.create(5000))
-                    .handler(this::get);
+                    .handler(this::get)
+                    .failureHandler(this::timeout);
 
-            discoveryRouter.delete("/delete")
+            discoveryRouter.delete("/:id")
                     .handler(TimeoutHandler.create(5000))
-                    .handler(this::delete);
+                    .handler(this::delete)
+                    .failureHandler(this::timeout);
 
             discoveryRouter.post("/:id/run")
-                            .handler(TimeoutHandler.create(5000))
-                                    .handler(this::discover);
-
-            discoveryRouter.get("/notfound").handler(ctx->{
-                ctx.response().setStatusCode(500).end("No such request");
-            });
-
-            discoveryRouter.route().failureHandler(ctx->{
-                if(ctx.statusCode()==500)
-                {
-                    ctx.reroute("/notfound");
-                }
-                else
-                {
-                    ctx.next();
-                }
-            });
+                            .handler(TimeoutHandler.create(10000))
+                                    .handler(this::discover)
+                    .failureHandler(this::timeout);
         }
         catch (Exception exception)
         {
@@ -71,207 +66,232 @@ public class Discovery
         }
     }
 
+    private void timeout(RoutingContext context)
+    {
+        if (!context.response().ended())
+        {
+            context.response()
+                    .setStatusCode(408)
+                    .end("Request timed out.");
+        }
+    }
+
     //Creating discovery
 
-    private void create(RoutingContext context)
+    public void create(RoutingContext context)
     {
         try
         {
-            // Parse the incoming JSON payload
             var requestBody = context.body().asJsonObject();
 
-            var discoveryName = requestBody.getString("discovery.name");
+            var discovery = new Discoveries(
+                    null,
+                    null,
+                    requestBody.getString("discovery.name"),
+                    requestBody.getString("discovery.ip"),
+                    requestBody.getInteger("discovery.port"),
+                    requestBody.getJsonArray("discovery.credential.profiles"),
+                    "Down"
+            );
 
-            var ip = requestBody.getString("discovery.ip");
-
-            var port = requestBody.getInteger("discovery.port");
-
-            Optional<String> error = Config.validateFields(discoveryName,ip,port);
-
-            if(error.isPresent())
+            if (!Config.validIp(discovery.ip()))
             {
-                Config.respond(context,400,error.get());
-
+                context.response()
+                        .setStatusCode(400)
+                        .end(ApiResponse.error(400, "Invalid IP address provided", null).toJson());
                 return;
             }
 
-            // Process and respond
-            var discoveryID = System.currentTimeMillis();
-            JsonObject responseJson = new JsonObject()
-                    .put("discoveryName", discoveryName)
-                    .put("ip", ip)
-                    .put("port", port)
-                    .put("discoveryID", discoveryID);
+            if (Config.validPort(discovery.port()))
+            {
+                context.response()
+                        .setStatusCode(400)
+                        .end(ApiResponse.error(400, "Invalid port number provided", null).toJson());
+                return;
+            }
 
             // Insert into the database
-            discoveryQuery.insert(discoveryName,ip,port,discoveryID)
+            discoveryQuery.insert(discovery)
                     .onComplete(result->{
                         if(result.succeeded())
                         {
+                            Long discoveryID = result.result();
+                            JsonObject response = new JsonObject()
+                                    .put("discovery.id", discoveryID);
                             context.response()
-                                    .putHeader("content-type","application/json")
-                                    .end(responseJson.encodePrettily());
+                                    .setStatusCode(201)
+                                    .end(ApiResponse.success(201, "Discovery created successfully", response).toJson());
                         }
                         else
                         {
-                            context.response().setStatusCode(400).end(result.cause().getMessage());
+                            context.response()
+                                    .setStatusCode(500)
+                                    .end(ApiResponse.error(500, "Failed to create discovery", result.cause().getMessage()).toJson());
                         }
                     });
         }
-        catch (Exception e)
+        catch (Exception exception)
         {
             context.response()
-                    .setStatusCode(500)
-                    .end("Server error: " + e.getMessage());
+                    .setStatusCode(400)
+                    .end(ApiResponse.error(400,"Error in creating discovery",exception.getCause().getMessage()).toJson());
         }
     }
 
     //Fetching all discoveries from table
 
-    private void getAll(RoutingContext context)
+    public void getAll(RoutingContext context)
     {
         try
         {
-            discoveryQuery.getAllDiscoveries()
+            discoveryQuery.getAll()
                     .onComplete(result->{
-                       if(result.succeeded())
-                       {
-                           context.response()
-                                   .putHeader("content-type","application/json")
-                                   .end(result.result().encodePrettily());
-                       }
-                       else
-                       {
-                           context.response().setStatusCode(400).end(result.cause().getMessage());
-                       }
+                        if(result.succeeded())
+                        {
+                            JsonArray response = new JsonArray();
+
+                            List<Discoveries> discoveries = result.result();
+
+                            for(Discoveries discovery : discoveries)
+                            {
+                                response.add(new JsonObject()
+                                        .put("discovery.id", discovery.discoveryId())
+                                        .put("discovery.credential.profile", discovery.credential_profile())
+                                        .put("discovery.name", discovery.name())
+                                        .put("discovery.ip", discovery.ip())
+                                        .put("discovery.port", discovery.port())
+                                        .put("discovery.credential.profiles", discovery.credential_profiles())
+                                        .put("discovery.status", discovery.status())
+                                );
+                            }
+                            context.response()
+                                    .setStatusCode(200)
+                                    .end(ApiResponse.success(200, "Fetched discoveries successfully", response).toJson());
+                        }
+                        else
+                        {
+                            context.response()
+                                    .setStatusCode(404)
+                                    .end(ApiResponse.error(404, "Error in fetching discoveries", result.cause().getMessage()).toJson());
+                        }
                     });
         }
         catch (Exception exception)
         {
-            System.out.println("Error in fetching discoveries : "+exception.getMessage());
             context.response()
-                    .setStatusCode(500)
-                    .end("Server error: unable to process request");
+                    .setStatusCode(400)
+                    .end(ApiResponse.error(400,"Error in fetching discoveries",exception.getCause().getMessage()).toJson());
         }
     }
 
-    private void get(RoutingContext context)
+    //Fetching a discovery from table
+    public void get(RoutingContext context)
     {
         try
         {
-            var longID = context.queryParam("discovery.id").get(0);
+            var discoveryID = Long.parseLong(context.pathParam("id"));
 
-            if(longID == null || longID.isEmpty())
-            {
-                context.response()
-                        .setStatusCode(400)
-                        .end("Missing on invalid long id parameter");
-                return;
-            }
-            try
-            {
-                var discoveryID = Long.parseLong(longID);
+            discoveryQuery.get(discoveryID)
+                    .onComplete(result->{
+                        if(result.succeeded())
+                        {
+                            Discoveries discovery = result.result();
 
-                discoveryQuery.getDiscovery(discoveryID)
-                        .onComplete(result->{
-                            if(result.succeeded())
+                            JsonObject response = new JsonObject()
+                                    .put("discovery.id", discovery.discoveryId())
+                                    .put("discovery.credential.profile", discovery.credential_profile())
+                                    .put("discovery.name", discovery.name())
+                                    .put("discovery.ip", discovery.ip())
+                                    .put("discovery.port", discovery.port())
+                                    .put("discovery.credential.profiles", discovery.credential_profiles())
+                                    .put("discovery.status", discovery.status());
+
+                            context.response()
+                                    .setStatusCode(200)
+                                    .end(ApiResponse.success(200, "Discovery fetched successfully", response).toJson());
+
+                        }
+                        else
+                        {
+                            if (result.cause().getMessage().contains("Discovery not found"))
                             {
                                 context.response()
-                                        .putHeader("content-type","application/json")
-                                        .end(result.result().encodePrettily());
+                                        .setStatusCode(404)
+                                        .end(ApiResponse.error(404,"Discovery not found with this ID", result.cause().getMessage()).toJson());
                             }
                             else
                             {
-                                context.response().setStatusCode(400).end(result.cause().getMessage());
+                                context.response()
+                                        .setStatusCode(500)
+                                        .end(ApiResponse.error(500, "Error fetching discovery", result.cause().getMessage()).toJson());
                             }
-                        });
-            }
-            catch (NumberFormatException exception)
-            {
-                context.response()
-                        .setStatusCode(500)
-                        .end("Invalid format. It must be a long ID");
-            }
+                        }
+                    });
         }
         catch (Exception exception)
         {
-            System.out.println("Error in fetching discovery of this ID : "+exception.getMessage());
             context.response()
-                    .setStatusCode(500)
-                    .end("Server error: unable to process request");
+                    .setStatusCode(400)
+                    .end(ApiResponse.error(400,"Error in fetching discovery of this ID",exception.getCause().getMessage()).toJson());
         }
     }
 
     //deleting discovery
 
-    private void delete(RoutingContext context)
+    public void delete(RoutingContext context)
     {
         try
         {
-            var longID = context.queryParam("discovery.id").get(0);
+            var discoveryID = Long.parseLong(context.pathParam("id"));
 
-            if(longID == null || longID.isEmpty())
-            {
-                context.response()
-                        .setStatusCode(400)
-                        .end("Missing on invalid long id parameter");
-                return;
-            }
-            try
-            {
-                var discoveryID = Long.parseLong(longID);
-
-                discoveryQuery.deleteDiscovery(discoveryID)
-                        .onComplete(result->{
-                            if(result.succeeded())
+            discoveryQuery.delete(discoveryID)
+                    .onComplete(result->{
+                        if(result.succeeded())
+                        {
+                            context.response()
+                                    .setStatusCode(200)
+                                    .end(ApiResponse.success(200, "Discovery deleted successfully", null).toJson());
+                        }
+                        else
+                        {
+                            if (result.cause().getMessage().contains("Discovery not found"))
                             {
-                                context.response().setStatusCode(200).end("Discovery successfully deleted");
+                                context.response()
+                                        .setStatusCode(404)
+                                        .end(ApiResponse.error(404,"Not found", result.cause().getMessage()).toJson());
                             }
                             else
                             {
-                                context.response().setStatusCode(400).end(result.cause().getMessage());
+                                context.response()
+                                        .setStatusCode(500)
+                                        .end(ApiResponse.error(500, "Error deleting discovery", result.cause().getMessage()).toJson());
                             }
-                        });
-            }
-            catch (NumberFormatException exception)
-            {
-                context.response()
-                        .setStatusCode(500)
-                        .end("Invalid format. It must be a long ID");
-            }
+                        }
+                    });
         }
         catch (Exception exception)
         {
-            System.out.println("Error in deleting discovery of this ID : "+exception.getMessage());
             context.response()
-                    .setStatusCode(500)
-                    .end("Server error: unable to process request");
+                    .setStatusCode(400)
+                    .end(ApiResponse.error(400,"Error in deleting discovery of this ID",exception.getCause().getMessage()).toJson());
         }
     }
 
     //Updating discovery
 
-    private void update(RoutingContext context)
+    public void update(RoutingContext context)
     {
         try
         {
-            var requestBody = context.body().asJsonObject();
+            var discoveryID = Long.parseLong(context.pathParam("id"));
 
-            var discoveryID = requestBody.getLong("discovery.id");
+            var requestBody = context.body().asJsonObject();
 
             var discoveryName = requestBody.getString("discovery.name");
 
             var ip = requestBody.getString("discovery.ip");
 
             var port = requestBody.getInteger("discovery.port");
-
-            if(discoveryID == null || discoveryID < 0)
-            {
-                context.response()
-                        .setStatusCode(400)
-                        .end("Invalid or missing discovery ID");
-                return;
-            }
 
             Optional<String> error = Config.validateFields(discoveryName,ip,port);
 
@@ -297,10 +317,9 @@ public class Discovery
         }
         catch (Exception exception)
         {
-            System.out.println("Error in updating discovery of this ID : "+exception.getMessage());
             context.response()
-                    .setStatusCode(500)
-                    .end("Server error: unable to process request");
+                    .setStatusCode(400)
+                    .end(ApiResponse.error(400,"Error in updating discovery of this ID",exception.getCause().getMessage()).toJson());
         }
 
     }
@@ -312,8 +331,6 @@ public class Discovery
         {
             var discoveryID = Long.parseLong(context.pathParam("id"));
 
-            System.out.println(discoveryID);
-
             discoveryQuery.fetch(discoveryID)
                     .compose(result->{
                         var ip = result.getString("ip_address");
@@ -323,9 +340,7 @@ public class Discovery
                         return vertx.<JsonObject>executeBlocking(pingFuture->{
                            try
                            {
-                               var status = Config.ping(ip);
-
-                               if(status)
+                               if(Config.ping(ip))
                                {
                                    pingFuture.complete(new JsonObject().put("ip",ip).put("port",port));
                                }
@@ -333,7 +348,6 @@ public class Discovery
                                {
                                    pingFuture.fail("Device is down, ping failed");
                                }
-
                            }
                            catch (Exception exception)
                            {
@@ -342,24 +356,23 @@ public class Discovery
                         });
                     })
                     .compose(deviceInfo->{
-                        var ip = deviceInfo.getString("ip");
-
-                        var port = deviceInfo.getInteger("port");
-
                         try
                         {
-                            if (Config.isPortOpen(ip, port))
+                            if (Config.isPortOpen(deviceInfo.getString("ip"), deviceInfo.getInteger("port")))
                             {
-                                return Future.succeededFuture(deviceInfo.put("status","UP"));
+//                                return Future.succeededFuture(deviceInfo.put("status","UP"));
+                                deviceInfo.put("status","UP");
                             }
                             else
                             {
-                                return Future.failedFuture("Device is up but port is closed");
+//                                return Future.failedFuture("Device is up but port is closed");
+                                deviceInfo.put("status","DOWN");
                             }
+                            return Future.succeededFuture(deviceInfo);
                         }
                         catch (Exception exception)
                         {
-                            return Future.failedFuture("Error during ping: "+exception.getMessage());
+                            return Future.failedFuture("Error during port check: "+exception.getMessage());
                         }
                     })
                     .compose(deviceInfo->{
@@ -371,10 +384,10 @@ public class Discovery
                                 .compose(updateResult -> {
                                     if (updateResult)
                                     {
-                                        return Future.succeededFuture("Device is up, port is open, and status updated in database");
+                                        return Future.succeededFuture("Device status updated in database");
                                     }
                                     else {
-                                        return Future.failedFuture("Device is up, port is open , but failed to update the database");
+                                        return Future.failedFuture("Failed to update the database");
                                     }
                                 });
                     })
@@ -387,10 +400,9 @@ public class Discovery
         }
         catch (Exception exception)
         {
-            System.out.println("Error in checking status of this ID : "+exception.getMessage());
             context.response()
                     .setStatusCode(500)
-                    .end("Server error: unable to process request");
+                    .end("Error in checking status of this ID : "+exception.getMessage());
         }
     }
 }

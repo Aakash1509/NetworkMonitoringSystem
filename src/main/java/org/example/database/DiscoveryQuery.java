@@ -6,122 +6,142 @@ import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.sqlclient.Row;
 import io.vertx.sqlclient.RowSet;
-import io.vertx.sqlclient.SqlClient;
 import io.vertx.sqlclient.Tuple;
+import org.example.model.Credential;
+import org.example.model.Discoveries;
 
 import java.sql.Timestamp;
+import java.util.ArrayList;
+import java.util.List;
+
+import static org.example.Bootstrap.client;
 
 public class DiscoveryQuery
 {
-    private final SqlClient client;
+//    private final  client;
 
-    public DiscoveryQuery(SqlClient sqlClient)
+//    public DiscoveryQuery(SqlClient sqlClient)
+//    {
+//        this.client = sqlClient;
+//    }
+
+    //Query for creating discovery
+    public Future<Long> insert(Discoveries discovery)
     {
-        this.client = sqlClient;
-    }
+        Promise<Long> promise = Promise.promise();
 
-    public Future<Void> insert(String discoveryName, String ip, int port, long discoveryID)
-    {
-        Promise<Void> promise = Promise.promise();
+        String sql = "INSERT INTO discoveries (name, ip, port, credential_profiles, status) " +
+                "VALUES ($1, $2, $3, $4, $5) RETURNING discovery_id";
 
-        client.preparedQuery("INSERT INTO discoveries (discovery_name,ip_address,port_number,long_id) VALUES(?,?,?,?)")
-                .execute(Tuple.of(discoveryName,ip,port,discoveryID), result->{
-                    if(result.succeeded())
+        client.preparedQuery(sql)
+                .execute(Tuple.of(
+                        discovery.name(),
+                        discovery.ip(),
+                        discovery.port(),
+                        discovery.credential_profiles(),
+                        discovery.status()
+                ), execute -> {
+                    if (execute.succeeded())
                     {
-                        promise.complete();
+                        RowSet<Row> rows = execute.result();
+                        if (rows.size() > 0)
+                        {
+                            Long discoveryId = rows.iterator().next().getLong("discovery_id");
+                            promise.complete(discoveryId);
+                        }
+                        else {
+                            promise.fail("Some problem");
+                        }
                     }
-                    else
-                    {
-                        promise.fail("Failed to insert discovery in database");
+                    else {
+                        promise.fail(execute.cause());
                     }
                 });
         return promise.future();
     }
 
-    public Future<JsonArray> getAllDiscoveries()
+    public Future<List<Discoveries>> getAll()
     {
-        Promise<JsonArray> promise = Promise.promise();
-        try
-        {
+        Promise<List<Discoveries>> promise = Promise.promise();
+
             client.query("SELECT * FROM discoveries")
                     .execute(result->{
                         if(result.succeeded())
                         {
-                            var discoveryArray = new JsonArray();
+                            RowSet<Row> rows = result.result();
 
-                            result.result().forEach(row -> {
-                                var discovery = new JsonObject()
-                                        .put("discovery.name",row.getString("discovery_name"))
-                                        .put("discovery.ip",row.getString("ip_address"))
-                                        .put("discovery.port",row.getInteger("port_number"))
-                                        .put("discovery.id",row.getLong("long_id"));
+                            List<Discoveries> discoveries = new ArrayList<>();
 
-                                discoveryArray.add(discovery);
-                            });
-                            promise.complete(discoveryArray);
+                            for(Row row : rows)
+                            {
+                                Discoveries discovery = new Discoveries(
+                                        row.getLong("discovery_id"),
+                                        row.getLong("credential_profile"),
+                                        row.getString("name"),
+                                        row.getString("ip"),
+                                        row.getInteger("port"),
+                                        row.getJsonArray("credential_profiles"),
+                                        row.getString("status")
+                                );
+                                discoveries.add(discovery);
+                            }
+                            promise.complete(discoveries);
                         }
                         else
                         {
                             promise.fail("Failed to fetch discoveries : "+result.cause().getMessage());
                         }
                     });
-        }
-        catch (Exception exception)
-        {
-            System.out.println("Error occurred : "+exception.getMessage());
-        }
+
         return promise.future();
     }
 
-    public Future<JsonObject> getDiscovery(long discoveryID)
+    public Future<Discoveries> get(long discoveryID)
     {
-        Promise<JsonObject> promise = Promise.promise();
+        Promise<Discoveries> promise = Promise.promise();
 
-        try
-        {
-            client.preparedQuery("SELECT discovery_name,ip_address,port_number FROM discoveries WHERE long_id = ?")
-                    .execute(Tuple.of(discoveryID),result->{
-                        if(result.succeeded())
+        String sql = "SELECT * FROM discoveries WHERE discovery_id=$1";
+
+        client.preparedQuery(sql)
+                .execute(Tuple.of(discoveryID),result->{
+                    if(result.succeeded())
+                    {
+                        RowSet<Row> rows = result.result();
+
+                        if(rows.size()>0)
                         {
-                            RowSet<Row> tuples = result.result();
+                            Row row = rows.iterator().next();
 
-                            if(tuples.size()>0)
-                            {
-                                Row row = tuples.iterator().next();
-
-                                var discovery = new JsonObject()
-                                        .put("discovery.name", row.getString("discovery_name"))
-                                        .put("discovery.ip", row.getString("ip_address"))
-                                        .put("discovery.port", row.getInteger("port_number"));
-
-                                promise.complete(discovery);
-                            }
-                            else
-                            {
-                                promise.complete(new JsonObject().put("Error","No discovery found with this ID"));
-                            }
+                            Discoveries discovery = new Discoveries(
+                                    row.getLong("discovery_id"),
+                                    row.getLong("credential_profile"),
+                                    row.getString("name"),
+                                    row.getString("ip"),
+                                    row.getInteger("port"),
+                                    row.getJsonArray("credential_profiles"),
+                                    row.getString("status")
+                            );
+                            promise.complete(discovery);
                         }
                         else
                         {
-                            promise.fail("Failed to fetch discovery : "+result.cause().getMessage());
+                            promise.fail("Discovery not found for ID: "+discoveryID);
                         }
-                    });
-        }
-        catch (Exception exception)
-        {
-            promise.fail("Error occurred while attempting to fetch discovery: " + exception.getMessage());
-        }
+                    }
+                    else
+                    {
+                        promise.fail(result.cause());
+                    }
+                });
         return promise.future();
     }
 
-    public Future<Void> deleteDiscovery(long discoveryID)
+    public Future<Void> delete(long discoveryID)
     {
         Promise<Void> promise = Promise.promise();
 
-        try
-        {
-            client.preparedQuery("DELETE FROM discoveries WHERE long_id = ?")
-                    .execute(Tuple.of(discoveryID),result->{
+        client.preparedQuery("DELETE FROM discoveries WHERE discovery_id = $1")
+                .execute(Tuple.of(discoveryID),result->{
                         if(result.succeeded())
                         {
                             if(result.result().rowCount()>0)
@@ -138,11 +158,6 @@ public class DiscoveryQuery
                             promise.fail("Failed to execute delete query: "+result.cause().getMessage());
                         }
                     });
-        }
-        catch (Exception exception)
-        {
-            promise.fail("Error occurred while attempting to delete: " + exception.getMessage());
-        }
         return promise.future();
     }
 

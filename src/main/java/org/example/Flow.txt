@@ -1,0 +1,64 @@
+1)Credential Module : To create credential profile (CRUD)
+
+->There will be 5 apis (create,get,getAll,update,delete)
+->Fields provided in create request will be : credential.profile.name(unique) , credential.profile.protocol
+    Now if it is a network device the fields will be community and version as connection would be checked through SNMP
+    Else the fields will be user.name and user.password as connection would be checked through SSH
+->Create API will return a long ID called credential_id and this id only will be used to get/update/delete later on if needed.
+->Database fields for credential table will be : credential.profile.id(PK),credential.profile.name, credential.profile.protocol, user.name,user.password,community,version
+
+
+2)Discovery Module : To make a particular device discovered (CRUD)
+
+->There will be 6 apis (create,get,getAll,update,delete and /:id/run)
+->Fields provided in create request will be : discovery.name(unique) , discovery.ip, discovery.port, and a json array of credential ids
+->Create api will return a long ID called discovery id and this id only will be used to get/update/delete later on if needed.
+->Now when I will hit /:id/run api the following steps will happen :
+a)By for loop I will traverse through array of credential IDs one by one, will fetch protocol and necessary arguments through id, will check if ping is
+    up or not, port is up or not and connection can be established or not
+b)Connection part will be checked on go plugin side, on vertx side I will spawn a process which will execute the .exe file using processBuilder class.
+(I will use go libraries for ssh and snmp)
+c)If connection is established I will break from the for loop and that credential id will be my required id
+
+->Database fields for discovery table will be : discovery.id(PK), credential.discovery.profile,discovery.name,discovery.ip,discovery.port,discovery.credential.profiles,status(up or down)
+
+
+3)Provision Module : To get license to poll the data
+
+->API will be : /:id/provision
+->Now if it is of linux or snmp type metrics will be attached to that object provided by Pruthvi Bhai
+->Output : Device provisioned successfully , and will generate an object.ID
+
+Database fields for object table will be : object.id, object.ip, object.hostname
+
+Database fields for metric table will be : metric.id, metric.group.name, metric.poll.time, metric.object
+
+4)Scheduling : Polling data (will pass context to the go plugin)
+
+->Again .exe would be run by spawning a process and data will be polled at particular time intervals and will be stored in file
+->File name would be ip with timestamp
+
+5)Transferring from vertx to GO db
+->Through ZMQ I will transfer data from vertx to Go which again will be stored in files , as soon as I read all the content of the file, the file would
+    be deleted on vertx side
+
+
+Note : During running /:id/run of discovery module and /:id/provision of provision module , if that ip is already present in metric table(ip can be fetched through credential_id), I should
+       send response that device is already provisioned.
+
+
+Status Codes :
+200 OK for successful requests.
+400 Bad Request for validation errors.
+404 Not Found if the resource doesn’t exist.
+500 Internal Server Error for server-side issues.
+
+
+Go plugin engine structure (As of now):
+
+package name inside it main.go file, I will pass the path of its .exe file in process builder class
+
+Output for APIs:
+Status code
+Data
+

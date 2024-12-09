@@ -1,5 +1,4 @@
 package org.example.utils;
-
 import io.vertx.ext.web.RoutingContext;
 
 import java.io.BufferedReader;
@@ -14,17 +13,19 @@ import java.util.regex.Pattern;
 
 public class Config
 {
-    public static int POOL_SIZE = 5;
+    public final static int POOL_SIZE = 5;
 
-    public static int DB_PORT = 3306;
+    public final static int DB_PORT = 5432;
 
-    public static String DB_HOST = "localhost";
+    public final static String DB_HOST = "localhost";
 
-    public static String DB_DATABASE = "project";
+    public final static String DB_DATABASE = "project";
 
-    public static String DB_USER = "root";
+    public final static String DB_USER = "postgres";
 
-    public static String DB_PASSWORD = "root";
+    public final static String DB_PASSWORD = "test";
+
+    public final static int HTTP_PORT = 8080;
 
     public static boolean validIp(String ip)
     {
@@ -71,8 +72,6 @@ public class Config
     {
         try
         {
-            System.out.println("Hello " + ip);
-
             var processBuilder = new ProcessBuilder("ping","-c 5",ip);
 
             var process = processBuilder.start();
@@ -83,6 +82,16 @@ public class Config
 
             boolean down = false;
 
+            //Due to network latency if 5 packets are not send, then waitFor
+            boolean status = process.waitFor(5, TimeUnit.SECONDS); //Will return boolean , while exitvalue returns 0 or other value
+
+            if(!status)
+            {
+                process.destroy();
+
+                return false;
+            }
+
             while((line = reader.readLine())!=null)
             {
                 if(line.contains("100% packet loss"))
@@ -92,14 +101,7 @@ public class Config
                     break;
                 }
             }
-            boolean status = process.waitFor(5, TimeUnit.SECONDS); //Will return boolean , while exitvalue returns 0 or 1
-
-            if(!status)
-            {
-                process.destroy();
-
-                return false;
-            }
+            //If status is true , but exit value can be 1
             if(process.exitValue()!=0)
             {
                 return false;
