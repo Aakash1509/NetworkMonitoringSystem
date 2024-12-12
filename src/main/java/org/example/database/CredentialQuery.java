@@ -1,38 +1,34 @@
 package org.example.database;
 import io.vertx.core.Future;
 import io.vertx.core.Promise;
+import io.vertx.core.json.JsonArray;
+import io.vertx.core.json.JsonObject;
 import io.vertx.sqlclient.Row;
 import io.vertx.sqlclient.RowSet;
 import io.vertx.sqlclient.Tuple;
-import org.example.model.Credential;
-
-import java.util.ArrayList;
-import java.util.List;
 
 import static org.example.Bootstrap.client;
 
 public class CredentialQuery
 {
     //Query for creating credential profile
-    public Future<Long> insert(Credential credential)
+    public Future<Long> insert(String profile_name, String profile_protocol, String user_name, String user_password, String community, String version)
     {
         Promise<Long> promise = Promise.promise();
 
-        String sql = "INSERT INTO credentials (profile_name, profile_protocol, user_name, user_password, community, version) " +
-                "VALUES ($1, $2, $3, $4, $5, $6) RETURNING profile_id";
-
-        client.preparedQuery(sql)
+        client.preparedQuery("INSERT INTO credentials (profile_name, profile_protocol, user_name, user_password, community, version) " +
+                        "VALUES ($1, $2, $3, $4, $5, $6) RETURNING profile_id")
                 .execute(Tuple.of(
-                        credential.profileName(),
-                        credential.protocol(),
-                        credential.userName(),
-                        credential.password(),
-                        credential.community(),
-                        credential.version()
-                ), ar -> {
-                    if (ar.succeeded())
+                        profile_name,
+                        profile_protocol,
+                        user_name,
+                        user_password,
+                        community,
+                        version
+                ), execute -> {
+                    if (execute.succeeded())
                     {
-                        RowSet<Row> rows = ar.result();
+                        RowSet<Row> rows = execute.result();
                         if (rows.size() > 0)
                         {
                             Long profileId = rows.iterator().next().getLong("profile_id");
@@ -43,43 +39,43 @@ public class CredentialQuery
                         }
                     }
                     else {
-                        promise.fail(ar.cause());
+                        promise.fail(execute.cause());
                     }
                 });
         return promise.future();
     }
 
     //Query for fetching all credential profiles
-    public Future<List<Credential>> getAll()
+    public Future<JsonArray> getAll()
     {
-        Promise<List<Credential>> promise = Promise.promise();
+        Promise<JsonArray> promise = Promise.promise();
 
         client.query("SELECT * FROM credentials")
-                .execute(result->{
-                    if(result.succeeded())
+                .execute(execute ->{
+                    if(execute.succeeded())
                     {
-                        RowSet<Row> rows = result.result();
+                        RowSet<Row> rows = execute.result();
 
-                        List<Credential> credentials = new ArrayList<>();
+                        var credentials = new JsonArray();
 
                         for(Row row : rows)
                         {
-                            Credential credential = new Credential(
-                                    row.getLong("profile_id"),
-                                    row.getString("profile_name"),
-                                    row.getString("profile_protocol"),
-                                    row.getString("user_name"),
-                                    row.getString("user_password"),
-                                    row.getString("community"),
-                                    row.getString("version")
-                            );
+                            var credential = new JsonObject()
+                                    .put("credential.profile.id",row.getLong("profile_id"))
+                                    .put("credential.profile.name",row.getString("profile_name"))
+                                    .put("credential.profile.protocol",row.getString("profile_protocol"))
+                                    .put("user.name",row.getString("user_name"))
+                                    .put("user.password",row.getString("user_password"))
+                                    .put("community",row.getString("community"))
+                                    .put("version",row.getString("version"));
+
                             credentials.add(credential);
                         }
                         promise.complete(credentials);
                     }
                     else
                     {
-                        promise.fail(result.cause());
+                        promise.fail(execute.cause());
                     }
                 });
 
@@ -87,32 +83,30 @@ public class CredentialQuery
     }
 
     //Query for fetching credential profile
-    public Future<Credential> get(Long profile_id)
+    public Future<JsonObject> get(Long profile_id)
     {
-        Promise<Credential> promise = Promise.promise();
+        Promise<JsonObject> promise = Promise.promise();
 
-        String sql = "SELECT * FROM credentials WHERE profile_id=$1";
-
-        client.preparedQuery(sql)
-                .execute(Tuple.of(profile_id),result->{
-                   if(result.succeeded())
+        client.preparedQuery("SELECT * FROM credentials WHERE profile_id=$1")
+                .execute(Tuple.of(profile_id), execute ->{
+                   if(execute.succeeded())
                    {
-                        RowSet<Row> rows = result.result();
+                        RowSet<Row> rows = execute.result();
 
                         if(rows.size()>0)
                         {
                             Row row = rows.iterator().next();
 
-                            Credential credential = new Credential(
-                                    row.getLong("profile_id"),
-                                    row.getString("profile_name"),
-                                    row.getString("profile_protocol"),
-                                    row.getString("user_name"),
-                                    row.getString("user_password"),
-                                    row.getString("community"),
-                                    row.getString("version")
-                            );
-                            promise.complete(credential);
+                            var response = new JsonObject()
+                                    .put("credential.profile.id",row.getLong("profile_id"))
+                                    .put("credential.profile.name",row.getString("profile_name"))
+                                    .put("credential.profile.protocol",row.getString("profile_protocol"))
+                                    .put("user.name",row.getString("user_name"))
+                                    .put("user.password",row.getString("user_password"))
+                                    .put("community",row.getString("community"))
+                                    .put("version",row.getString("version"));
+
+                            promise.complete(response);
                         }
                         else
                         {
@@ -121,7 +115,7 @@ public class CredentialQuery
                    }
                    else
                    {
-                       promise.fail(result.cause());
+                       promise.fail(execute.cause());
                    }
                 });
         return promise.future();
@@ -132,13 +126,11 @@ public class CredentialQuery
     {
         Promise<Void> promise = Promise.promise();
 
-        String sql = "DELETE FROM credentials WHERE profile_id = $1";
-
-        client.preparedQuery(sql)
-                .execute(Tuple.of(profile_id),result->{
-                   if(result.succeeded())
+        client.preparedQuery("DELETE FROM credentials WHERE profile_id = $1")
+                .execute(Tuple.of(profile_id), execute ->{
+                   if(execute.succeeded())
                    {
-                       if(result.result().rowCount()>0)
+                       if(execute.result().rowCount()>0)
                        {
                            promise.complete();
                        }
@@ -149,7 +141,7 @@ public class CredentialQuery
                    }
                    else
                    {
-                       promise.fail(result.cause());
+                       promise.fail(execute.cause());
                    }
                 });
 
@@ -157,43 +149,41 @@ public class CredentialQuery
     }
 
     //Query to update Credential profile
-    public Future<Void> update(Credential credential)
+    public Future<Void> update(Long profile_iD, String profile_name, String profile_protocol, String user_name, String user_password, String community, String version)
     {
         Promise<Void> promise = Promise.promise();
 
-        String sql = "UPDATE credentials " +
-                "SET profile_name = $1, " +
-                "    profile_protocol = $2, " +
-                "    user_name = $3, " +
-                "    user_password = $4, " +
-                "    community = $5, " +
-                "    version = $6 " +
-                "WHERE profile_id = $7";
-
-        client.preparedQuery(sql)
+        client.preparedQuery("UPDATE credentials " +
+                        "SET profile_name = $1, " +
+                        "    profile_protocol = $2, " +
+                        "    user_name = $3, " +
+                        "    user_password = $4, " +
+                        "    community = $5, " +
+                        "    version = $6 " +
+                        "WHERE profile_id = $7")
                 .execute(Tuple.of(
-                        credential.profileName(),
-                        credential.protocol(),
-                        credential.userName(),
-                        credential.password(),
-                        credential.community(),
-                        credential.version(),
-                        credential.profileId()
-                ), ar -> {
-                    if (ar.succeeded())
+                        profile_name,
+                        profile_protocol,
+                        user_name,
+                        user_password,
+                        community,
+                        version,
+                        profile_iD
+                ), execute -> {
+                    if (execute.succeeded())
                     {
-                        if (ar.result().rowCount() > 0)
+                        if (execute.result().rowCount() > 0)
                         {
                             promise.complete(); // Update succeeded
                         }
                         else
                         {
-                            promise.fail("Credential profile not found for ID: " + credential.profileId());
+                            promise.fail("Credential profile not found for ID: " + profile_iD);
                         }
                     }
                     else
                     {
-                        promise.fail(ar.cause()); // Database error
+                        promise.fail(execute.cause()); // Database error
                     }
                 });
 

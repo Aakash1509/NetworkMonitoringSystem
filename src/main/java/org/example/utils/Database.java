@@ -7,27 +7,23 @@ import org.example.Bootstrap;
 
 public class Database
 {
-        private static PgPool client;
+        public static PgPool client;
 
-        public static PgPool getClient()
+        static
         {
-                if (client == null)
-                {
-                        // Database connection options
-                        PgConnectOptions connectOptions = new PgConnectOptions()
-                                .setPort(Config.DB_PORT)
-                                .setHost(Config.DB_HOST)
-                                .setDatabase(Config.DB_DATABASE)
-                                .setUser(Config.DB_USER)
-                                .setPassword(Config.DB_PASSWORD);
+                // Database connection options
+                PgConnectOptions connectOptions = new PgConnectOptions()
+                        .setPort(Config.DB_PORT)
+                        .setHost(Config.DB_HOST)
+                        .setDatabase(Config.DB_DATABASE)
+                        .setUser(Config.DB_USER)
+                        .setPassword(Config.DB_PASSWORD);
 
-                        // Pool options
-                        PoolOptions poolOptions = new PoolOptions()
-                                .setMaxSize(Config.POOL_SIZE); // Maximum connections in the pool
+                // Pool options
+                PoolOptions poolOptions = new PoolOptions()
+                        .setMaxSize(Config.POOL_SIZE); // Maximum connections in the pool
 
-                        // Create client
-                        client = PgPool.pool(Bootstrap.vertx, connectOptions, poolOptions);
-                }
-                return client;
+                // Create client
+                client = PgPool.pool(Bootstrap.vertx, connectOptions, poolOptions);
         }
 }

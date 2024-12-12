@@ -1,20 +1,19 @@
 package org.example.routes;
 
-import io.vertx.core.json.JsonArray;
+import io.vertx.core.impl.logging.Logger;
+import io.vertx.core.impl.logging.LoggerFactory;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.Router;
 import io.vertx.ext.web.RoutingContext;
 import io.vertx.ext.web.handler.BodyHandler;
 import io.vertx.ext.web.handler.TimeoutHandler;
 import org.example.database.CredentialQuery;
-import org.example.model.Credential;
-import org.example.utils.ApiResponse;
-
-import java.util.List;
 
 public class Credentials implements CrudOperations
 {
     private final CredentialQuery credentialQuery = new CredentialQuery();
+
+    private static final Logger logger = LoggerFactory.getLogger(Credentials.class);
     
     public void route(Router credentialRouter) 
     {
@@ -49,7 +48,7 @@ public class Credentials implements CrudOperations
         }
         catch (Exception exception)
         {
-            System.out.println("Error in credential routing : "+exception.getMessage());
+            logger.error("Error in credential routing", exception);
         }
     }
 
@@ -58,8 +57,12 @@ public class Credentials implements CrudOperations
         if (!context.response().ended())
         {
             context.response()
-                    .setStatusCode(408)
-                    .end(ApiResponse.error(408,"Request Timed Out","The server timed out waiting for the request.").toJson());
+                .setStatusCode(408)
+                .end(new JsonObject()
+                        .put("status.code",408)
+                        .put("message","Request Timed Out")
+                        .put("error","The server timed out waiting for the request").encodePrettily());
+            
         }
     }
 
@@ -71,40 +74,46 @@ public class Credentials implements CrudOperations
         {
             var requestBody = context.body().asJsonObject();
 
-            Credential credential = new Credential(
-                    null, requestBody.getString("credential.profile.name"),
-                    requestBody.getString("credential.profile.protocol"),
-                    requestBody.getString("user.name"),
-                    requestBody.getString("user.password"),
-                    requestBody.getString("community"),
-                    requestBody.getString("version")
-            );
-
-            credentialQuery.insert(credential)
+            credentialQuery.insert(requestBody.getString("credential.profile.name"),
+                            requestBody.getString("credential.profile.protocol"),
+                            requestBody.getString("user.name"),
+                            requestBody.getString("user.password"),
+                            requestBody.getString("community"),
+                            requestBody.getString("version"))
                     .onComplete(result->{
                         if (result.succeeded())
                         {
-                            Long profileId = result.result();
+                            var profileId = result.result();
 
                             JsonObject response = new JsonObject()
                                     .put("credential.profile.id", profileId);
+                            
                             context.response()
                                     .setStatusCode(201)
-                                    .end(ApiResponse.success(201, "Credential profile created successfully", response).toJson());
+                                    .end(new JsonObject()
+                                            .put("status.code",201)
+                                            .put("message","Credential profile created successfully")
+                                            .put("data",response).encodePrettily());
                         }
                         else
                         {
                             context.response()
                                     .setStatusCode(500)
-                                    .end(ApiResponse.error(500, "Failed to create credential profile", result.cause().getMessage()).toJson());
+                                    .end(new JsonObject()
+                                            .put("status.code",500)
+                                            .put("message","Failed to create credential profile")
+                                            .put("error",result.cause().getMessage()).encodePrettily());
                         }
                     });
         }
         catch (Exception exception)
         {
             context.response()
-                    .setStatusCode(400)
-                    .end(ApiResponse.error(400,"Error in creating credential profile",exception.getCause().getMessage()).toJson());
+                    .setStatusCode(500)
+                    .end(new JsonObject()
+                            .put("status.code",500)
+                            .put("message","Server error in creating credential profile")
+                            .put("error",exception.getCause().getMessage()).encodePrettily());
         }
     }
 
@@ -116,36 +125,43 @@ public class Credentials implements CrudOperations
         {
             var profileID = Long.parseLong(context.pathParam("id"));
 
-            JsonObject requestBody = context.body().asJsonObject();
+            var requestBody = context.body().asJsonObject();
 
-            Credential credential = new Credential(
-                    profileID,
-                    requestBody.getString("credential.profile.name"),
-                    requestBody.getString("credential.profile.protocol"),
-                    requestBody.getString("user.name"),
-                    requestBody.getString("user.password"),
-                    requestBody.getString("community"),
-                    requestBody.getString("version")
-            );
-
-            credentialQuery.update(credential)
+            credentialQuery.update(profileID,
+                            requestBody.getString("credential.profile.name"),
+                            requestBody.getString("credential.profile.protocol"),
+                            requestBody.getString("user.name"),
+                            requestBody.getString("user.password"),
+                            requestBody.getString("community"),
+                            requestBody.getString("version"))
                     .onComplete(result->{
                        if(result.succeeded())
                        {
                            context.response()
                                    .setStatusCode(200)
-                                   .end(ApiResponse.success(200, "Credential profile updated successfully ", null).toJson());
+                                   .end(new JsonObject()
+                                           .put("status.code",404)
+                                           .put("message","Credential profile updated successfully").encodePrettily());
                        }
                        else
                        {
-                           if (result.cause().getMessage().contains("Credential profile not found")) {
+                           if (result.cause().getMessage().contains("Credential profile not found"))
+                           {
                                context.response()
                                        .setStatusCode(404)
-                                       .end(ApiResponse.error(404, result.cause().getMessage(), null).toJson());
-                           } else {
+                                       .end(new JsonObject()
+                                               .put("status.code",404)
+                                               .put("message","Credential profile not found of this ID")
+                                               .put("error",result.cause().getMessage()).encodePrettily());
+                           }
+                           else
+                           {
                                context.response()
                                        .setStatusCode(500)
-                                       .end(ApiResponse.error(500, "Error updating credential profile", result.cause().getMessage()).toJson());
+                                       .end(new JsonObject()
+                                               .put("status.code",500)
+                                               .put("message","Database error while updating credential profile")
+                                               .put("error",result.cause().getMessage()).encodePrettily());
                            }
                        }
                     });
@@ -153,8 +169,11 @@ public class Credentials implements CrudOperations
         catch (Exception exception)
         {
             context.response()
-                    .setStatusCode(400)
-                    .end(ApiResponse.error(400,"Error in updating credential profile",exception.getCause().getMessage()).toJson());
+                    .setStatusCode(500)
+                    .end(new JsonObject()
+                            .put("status.code",500)
+                            .put("message","Server error in updating credential profile")
+                            .put("error",exception.getCause().getMessage()).encodePrettily());
         }
     }
 
@@ -164,26 +183,35 @@ public class Credentials implements CrudOperations
     {
         try
         {
-            var profileID = Long.parseLong(context.pathParam("id"));
-
-            credentialQuery.delete(profileID)
+            credentialQuery.delete(Long.parseLong(context.pathParam("id")))
                     .onComplete(result->{
                        if(result.succeeded())
                        {
                            context.response()
                                    .setStatusCode(200)
-                                   .end(ApiResponse.success(200, "Credential profile deleted successfully", null).toJson());
+                                   .end(new JsonObject()
+                                           .put("status.code",404)
+                                           .put("message","Credential profile deleted successfully").encodePrettily());
                        }
                        else
                        {
-                           if (result.cause().getMessage().contains("Credential profile not found")) {
+                           if (result.cause().getMessage().contains("Credential profile not found"))
+                           {
                                context.response()
                                        .setStatusCode(404)
-                                       .end(ApiResponse.error(404, result.cause().getMessage(), null).toJson());
-                           } else {
+                                       .end(new JsonObject()
+                                               .put("status.code",404)
+                                               .put("message","Credential profile not found of this ID")
+                                               .put("error",result.cause().getMessage()).encodePrettily());
+                           }
+                           else
+                           {
                                context.response()
                                        .setStatusCode(500)
-                                       .end(ApiResponse.error(500, "Error deleting credential profile", result.cause().getMessage()).toJson());
+                                       .end(new JsonObject()
+                                               .put("status.code",500)
+                                               .put("message","Database error while deleting credential profile")
+                                               .put("error",result.cause().getMessage()).encodePrettily());
                            }
                        }
                     });
@@ -191,8 +219,11 @@ public class Credentials implements CrudOperations
         catch (Exception exception)
         {
             context.response()
-                    .setStatusCode(400)
-                    .end(ApiResponse.error(400,"Error in deleting credential profile",exception.getCause().getMessage()).toJson());
+                    .setStatusCode(500)
+                    .end(new JsonObject()
+                            .put("status.code",500)
+                            .put("message","Server error in deleting credential profile")
+                            .put("error",exception.getCause().getMessage()).encodePrettily());
         }
     }
 
@@ -202,27 +233,16 @@ public class Credentials implements CrudOperations
     {
         try
         {
-            var profileID = Long.parseLong(context.pathParam("id"));
-
-            credentialQuery.get(profileID)
+            credentialQuery.get(Long.parseLong(context.pathParam("id")))
                     .onComplete(result->{
                         if(result.succeeded())
                         {
-                            Credential credential = result.result();
-
-                            JsonObject response = new JsonObject()
-                                    .put("credential.profile.id", credential.profileId())
-                                    .put("credential.profile.name", credential.profileName())
-                                    .put("credential.profile.protocol", credential.protocol())
-                                    .put("user.name", credential.userName())
-                                    .put("user.password", credential.password())
-                                    .put("community", credential.community())
-                                    .put("version", credential.version());
-
                             context.response()
                                     .setStatusCode(200)
-                                    .end(ApiResponse.success(200, "Credential profile fetched successfully", response).toJson());
-
+                                    .end(new JsonObject()
+                                            .put("status.code",200)
+                                            .put("message","Credential profile fetched successfully")
+                                            .put("data",result.result()).encodePrettily());
                         }
                         else
                         {
@@ -230,13 +250,19 @@ public class Credentials implements CrudOperations
                             {
                                 context.response()
                                         .setStatusCode(404)
-                                        .end(ApiResponse.error(404, "Credential profile not found with this ID ", result.cause().getMessage()).toJson());
+                                        .end(new JsonObject()
+                                                .put("status.code",404)
+                                                .put("message","Credential profile not found of this ID")
+                                                .put("error",result.cause().getMessage()).encodePrettily());
                             }
                             else
                             {
                                 context.response()
                                         .setStatusCode(500)
-                                        .end(ApiResponse.error(500, "Error fetching credential profile", result.cause().getMessage()).toJson());
+                                        .end(new JsonObject()
+                                                .put("status.code",500)
+                                                .put("message","Database error while fetching credential profile")
+                                                .put("error",result.cause().getMessage()).encodePrettily());
                             }
                         }
                     });
@@ -244,8 +270,11 @@ public class Credentials implements CrudOperations
         catch (Exception exception)
         {
             context.response()
-                    .setStatusCode(400)
-                    .end(ApiResponse.error(400,"Error in fetching credential profile for given id",exception.getCause().getMessage()).toJson());
+                    .setStatusCode(500)
+                    .end(new JsonObject()
+                            .put("status.code",500)
+                            .put("message","Server error in fetching credential profile for given ID")
+                            .put("error",exception.getCause().getMessage()).encodePrettily());
         }
     }
 
@@ -259,39 +288,46 @@ public class Credentials implements CrudOperations
                     .onComplete(result->{
                         if(result.succeeded())
                         {
-                            JsonArray response = new JsonArray();
+                            var credentials = result.result();
 
-                            List<Credential> credentials = result.result();
-
-                            for(Credential credential : credentials)
+                            if(!credentials.isEmpty())
                             {
-                                response.add(new JsonObject()
-                                        .put("credential.profile.id", credential.profileId())
-                                        .put("credential.profile.name", credential.profileName())
-                                        .put("credential.profile.protocol", credential.protocol())
-                                        .put("user.name", credential.userName())
-                                        .put("user.password", credential.password())
-                                        .put("community", credential.community())
-                                        .put("version", credential.version())
-                                );
+                                context.response()
+                                        .setStatusCode(200)
+                                        .end(new JsonObject()
+                                                .put("status.code",200)
+                                                .put("message","Credential profiles fetched successfully")
+                                                .put("data",credentials).encodePrettily());
                             }
-                            context.response()
-                                    .setStatusCode(200)
-                                    .end(ApiResponse.success(200, "Fetched credential profiles successfully", response).toJson());
+                            else
+                            {
+                                context.response()
+                                        .setStatusCode(200)
+                                        .end(new JsonObject()
+                                                .put("status.code",200)
+                                                .put("message","Credential profiles fetched successfully")
+                                                .put("data","No credential profiles currently").encodePrettily());
+                            }
                         }
                         else
                         {
                             context.response()
-                                    .setStatusCode(404)
-                                    .end(ApiResponse.error(404, "Error in fetching credential profiles", result.cause().getMessage()).toJson());
+                                    .setStatusCode(500)
+                                    .end(new JsonObject()
+                                            .put("status.code",500)
+                                            .put("message","Database error while fetching credential profiles")
+                                            .put("error",result.cause().getMessage()).encodePrettily());
                         }
                     });
         }
         catch (Exception exception)
         {
             context.response()
-                    .setStatusCode(400)
-                    .end(ApiResponse.error(400,"Error in fetching credential profiles",exception.getCause().getMessage()).toJson());
+                    .setStatusCode(500)
+                    .end(new JsonObject()
+                            .put("status.code",500)
+                            .put("message","Server error in fetching credential profiles")
+                            .put("error",exception.getCause().getMessage()).encodePrettily());
         }
     }
 }

@@ -1,7 +1,10 @@
 package org.example;
 
 import io.vertx.core.Vertx;
+import io.vertx.core.impl.logging.Logger;
+import io.vertx.core.impl.logging.LoggerFactory;
 import io.vertx.pgclient.PgPool;
+import org.example.routes.Discovery;
 import org.example.utils.Database;
 import org.example.routes.Server;
 
@@ -9,7 +12,9 @@ public class Bootstrap
 {
     public static final Vertx vertx = Vertx.vertx();
 
-    public static final PgPool client = Database.getClient();
+    public static final PgPool client = Database.client;
+
+    private static final Logger logger = LoggerFactory.getLogger(Discovery.class);
 
     public static void main(String[] args)
     {
@@ -17,11 +22,11 @@ public class Bootstrap
                 .onComplete(result->{
                    if(result.succeeded())
                    {
-                       System.out.println("Server verticle deployed successfully");
+                       logger.info("Server verticle deployed successfully");
                    }
                    else
                    {
-                       System.out.println("Something went wrong");
+                       logger.error("Error in discovery routing", result.cause());
                    }
                 });
     }
