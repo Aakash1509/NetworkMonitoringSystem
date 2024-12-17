@@ -38,8 +38,22 @@ public class CredentialQuery
                             promise.fail("Some problem");
                         }
                     }
-                    else {
-                        promise.fail(execute.cause());
+                    else
+                    {
+                        var error = execute.cause().getMessage();
+
+                        if(error.contains("credentials_profile_name_key"))
+                        {
+                            promise.fail("Credential profile name must be unique");
+                        }
+                        else if(error.contains("check_protocol_fields"))
+                        {
+                            promise.fail("Please enter necessary details according to your required protocol");
+                        }
+                        else
+                        {
+                            promise.fail(error);
+                        }
                     }
                 });
         return promise.future();
@@ -83,12 +97,12 @@ public class CredentialQuery
     }
 
     //Query for fetching credential profile
-    public Future<JsonObject> get(Long profile_id)
+    public Future<JsonObject> get(Long profileID)
     {
         Promise<JsonObject> promise = Promise.promise();
 
-        client.preparedQuery("SELECT * FROM credentials WHERE profile_id=$1")
-                .execute(Tuple.of(profile_id), execute ->{
+        client.preparedQuery("SELECT * FROM credentials WHERE profileID=$1")
+                .execute(Tuple.of(profileID), execute ->{
                    if(execute.succeeded())
                    {
                         RowSet<Row> rows = execute.result();
@@ -98,7 +112,7 @@ public class CredentialQuery
                             Row row = rows.iterator().next();
 
                             var response = new JsonObject()
-                                    .put("credential.profile.id",row.getLong("profile_id"))
+                                    .put("credential.profile.id",row.getLong("profileID"))
                                     .put("credential.profile.name",row.getString("profile_name"))
                                     .put("credential.profile.protocol",row.getString("profile_protocol"))
                                     .put("user.name",row.getString("user_name"))
@@ -110,7 +124,7 @@ public class CredentialQuery
                         }
                         else
                         {
-                            promise.fail("Credential profile not found for ID: "+profile_id);
+                            promise.fail("Credential profile not found for ID: "+ profileID);
                         }
                    }
                    else
@@ -122,12 +136,12 @@ public class CredentialQuery
     }
 
     //Query to delete credential profile
-    public Future<Void> delete(Long profile_id)
+    public Future<Void> delete(Long profileID)
     {
         Promise<Void> promise = Promise.promise();
 
         client.preparedQuery("DELETE FROM credentials WHERE profile_id = $1")
-                .execute(Tuple.of(profile_id), execute ->{
+                .execute(Tuple.of(profileID), execute ->{
                    if(execute.succeeded())
                    {
                        if(execute.result().rowCount()>0)
@@ -136,7 +150,7 @@ public class CredentialQuery
                        }
                        else
                        {
-                           promise.fail("Credential profile not found for ID: "+profile_id);
+                           promise.fail("Credential profile not found for ID: "+profileID);
                        }
                    }
                    else
@@ -149,7 +163,7 @@ public class CredentialQuery
     }
 
     //Query to update Credential profile
-    public Future<Void> update(Long profile_iD, String profile_name, String profile_protocol, String user_name, String user_password, String community, String version)
+    public Future<Void> update(Long profileID, String profile_name, String profile_protocol, String user_name, String user_password, String community, String version)
     {
         Promise<Void> promise = Promise.promise();
 
@@ -168,7 +182,7 @@ public class CredentialQuery
                         user_password,
                         community,
                         version,
-                        profile_iD
+                        profileID
                 ), execute -> {
                     if (execute.succeeded())
                     {
@@ -178,12 +192,25 @@ public class CredentialQuery
                         }
                         else
                         {
-                            promise.fail("Credential profile not found for ID: " + profile_iD);
+                            promise.fail("Credential profile not found");
                         }
                     }
                     else
                     {
-                        promise.fail(execute.cause()); // Database error
+                        var error = execute.cause().getMessage();
+
+                        if(error.contains("credentials_profile_name_key"))
+                        {
+                            promise.fail("Credential profile name must be unique");
+                        }
+                        else if(error.contains("check_protocol_fields"))
+                        {
+                            promise.fail("Please enter necessary details according to your required protocol");
+                        }
+                        else
+                        {
+                            promise.fail(error); //Database error
+                        }
                     }
                 });
 

@@ -38,8 +38,18 @@ public class DiscoveryQuery
                             promise.fail("Some problem");
                         }
                     }
-                    else {
-                        promise.fail(execute.cause());
+                    else
+                    {
+                        var error = execute.cause().getMessage();
+
+                        if(error.contains("unique_name"))
+                        {
+                            promise.fail("Discovery name must be unique");
+                        }
+                        else
+                        {
+                            promise.fail(error);
+                        }
                     }
                 });
         return promise.future();
@@ -139,7 +149,7 @@ public class DiscoveryQuery
                         }
                         else
                         {
-                            promise.fail(execute.cause());
+                            promise.fail(execute.cause().getMessage());
                         }
                     });
 
@@ -177,7 +187,16 @@ public class DiscoveryQuery
                     }
                     else
                     {
-                        promise.fail(execute.cause());
+                        var error = execute.cause().getMessage();
+
+                        if(error.contains("unique_name"))
+                        {
+                            promise.fail("Discovery name must be unique");
+                        }
+                        else
+                        {
+                            promise.fail(error);
+                        }
                     }
                 });
 
@@ -235,8 +254,8 @@ public class DiscoveryQuery
                 }
             });
 
-    return promise.future();
-}
+        return promise.future();
+    }
 
 
     public Future<JsonObject> fetchProfile(Long profileID)

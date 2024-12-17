@@ -16,7 +16,7 @@ import java.util.regex.Pattern;
 
 public class Config
 {
-    private static final Logger logger = LoggerFactory.getLogger(Discovery.class);
+    private static final Logger logger = LoggerFactory.getLogger(Config.class);
 
     public static final int POOL_SIZE = 5;
 
@@ -137,7 +137,7 @@ public class Config
             String credentials = deviceInfo.getJsonArray("discovery.credential.profiles").encode();
 
             // Spawning a process
-            Process process = new ProcessBuilder("/home/aakash/Plugin/ssh/main", ip, port, credentials)
+            Process process = new ProcessBuilder("/home/aakash/Plugin/snmp/main", ip, port, credentials)
                     .redirectErrorStream(true).start();
 
             // Wait for the process to complete within 60 seconds
@@ -147,7 +147,7 @@ public class Config
             {
                 process.destroy();
 
-                logger.warn("SSH connection check timed out");
+                logger.warn("Connection check timed out");
                 // Terminate the process if it times out
                 return false;
             }
@@ -175,7 +175,7 @@ public class Config
         }
         catch (Exception exception)
         {
-            logger.error("Error during SSH connection: " + exception.getMessage());
+            logger.error("Error during connection making: " + exception.getMessage());
 
             return false;
         }

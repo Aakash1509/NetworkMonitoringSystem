@@ -26,6 +26,13 @@ public class Server extends AbstractVerticle
 
         new Discovery().route(discoveryRouter); //Instead of var discoveryObject = new Discovery();discoveryObject.route(discoveryRouter)
 
+        //C)Provision Module : Provision Router for handling Provision routes
+        var provisionRouter = Router.router(vertx);
+
+        router.route("/api/v1/provision/*").subRouter(provisionRouter);
+
+        new Provision().route(provisionRouter);
+
         router.get("/api/v1/").handler(ctx -> ctx.response()
                 .setStatusCode(200)
                 .end(new JsonObject()

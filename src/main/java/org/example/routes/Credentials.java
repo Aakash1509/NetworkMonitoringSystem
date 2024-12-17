@@ -8,10 +8,13 @@ import io.vertx.ext.web.RoutingContext;
 import io.vertx.ext.web.handler.BodyHandler;
 import io.vertx.ext.web.handler.TimeoutHandler;
 import org.example.database.CredentialQuery;
+import org.example.database.QueryUtility;
 
 public class Credentials implements CrudOperations
 {
     private final CredentialQuery credentialQuery = new CredentialQuery();
+
+    private final QueryUtility queryHandler = new QueryUtility();
 
     private static final Logger logger = LoggerFactory.getLogger(Credentials.class);
     
@@ -74,12 +77,28 @@ public class Credentials implements CrudOperations
         {
             var requestBody = context.body().asJsonObject();
 
-            credentialQuery.insert(requestBody.getString("credential.profile.name"),
-                            requestBody.getString("credential.profile.protocol"),
-                            requestBody.getString("user.name"),
-                            requestBody.getString("user.password"),
-                            requestBody.getString("community"),
-                            requestBody.getString("version"))
+            var name = requestBody.getString("credential.profile.name");
+
+            var protocol = requestBody.getString("credential.profile.protocol");
+
+            if(name == null || name.isEmpty() || protocol == null || protocol.isEmpty())
+            {
+                context.response()
+                        .setStatusCode(500)
+                        .end(new JsonObject()
+                                .put("status.code",500)
+                                .put("message","Please enter both username and protocol").encodePrettily());
+
+                return;
+            }
+
+            queryHandler.insert("credentials",new JsonObject()
+                            .put("profile_name",name)
+                            .put("profile_protocol",protocol)
+                            .put("user_name",requestBody.getString("user.name"))
+                            .put("user_password",requestBody.getString("user.password"))
+                            .put("community",requestBody.getString("community"))
+                            .put("version",requestBody.getString("version")))
                     .onComplete(result->{
                         if (result.succeeded())
                         {
@@ -121,38 +140,55 @@ public class Credentials implements CrudOperations
     @Override
     public void update(RoutingContext context)
     {
+
+        var credentialID = context.pathParam("id");
+
+        var requestBody = context.body().asJsonObject();
+
+        var name = requestBody.getString("credential.profile.name");
+
+        var protocol = requestBody.getString("credential.profile.protocol");
+
+        if(name == null || name.isEmpty() || protocol == null || protocol.isEmpty() || credentialID == null || credentialID.isEmpty())
+        {
+            context.response()
+                    .setStatusCode(500)
+                    .end(new JsonObject()
+                            .put("status.code",500)
+                            .put("message","Please enter all the details of credentialID , username and protocol").encodePrettily());
+            return;
+        }
         try
         {
-            var profileID = Long.parseLong(context.pathParam("id"));
 
-            var requestBody = context.body().asJsonObject();
+            long id = Long.parseLong(credentialID);
 
-            credentialQuery.update(profileID,
-                            requestBody.getString("credential.profile.name"),
-                            requestBody.getString("credential.profile.protocol"),
-                            requestBody.getString("user.name"),
-                            requestBody.getString("user.password"),
-                            requestBody.getString("community"),
-                            requestBody.getString("version"))
+            queryHandler.update("credentials",new JsonObject()
+                            .put("profile_name",name)
+                            .put("profile_protocol",protocol)
+                            .put("user_name",requestBody.getString("user.name"))
+                            .put("user_password",requestBody.getString("user.password"))
+                            .put("community",requestBody.getString("community"))
+                            .put("version",requestBody.getString("version"))
+                            .put("profile_id",id))
                     .onComplete(result->{
                        if(result.succeeded())
                        {
                            context.response()
                                    .setStatusCode(200)
                                    .end(new JsonObject()
-                                           .put("status.code",404)
+                                           .put("status.code",200)
                                            .put("message","Credential profile updated successfully").encodePrettily());
                        }
                        else
                        {
-                           if (result.cause().getMessage().contains("Credential profile not found"))
+                           if (result.cause().getMessage().contains("Information not found"))
                            {
                                context.response()
                                        .setStatusCode(404)
                                        .end(new JsonObject()
                                                .put("status.code",404)
-                                               .put("message","Credential profile not found of this ID")
-                                               .put("error",result.cause().getMessage()).encodePrettily());
+                                               .put("message","Credential profile not found of this ID").encodePrettily());
                            }
                            else
                            {
@@ -181,59 +217,85 @@ public class Credentials implements CrudOperations
     @Override
     public void delete(RoutingContext context)
     {
+        var credentialID = context.pathParam("id");
+
+        if (credentialID == null || credentialID.isEmpty())
+        {
+            context.response()
+                    .setStatusCode(404)
+                    .end(new JsonObject()
+                            .put("status.code", 404)
+                            .put("message", "Please enter a valid credential ID").encodePrettily());
+            return;
+        }
         try
         {
-            credentialQuery.delete(Long.parseLong(context.pathParam("id")))
-                    .onComplete(result->{
-                       if(result.succeeded())
-                       {
-                           context.response()
-                                   .setStatusCode(200)
-                                   .end(new JsonObject()
-                                           .put("status.code",404)
-                                           .put("message","Credential profile deleted successfully").encodePrettily());
-                       }
-                       else
-                       {
-                           if (result.cause().getMessage().contains("Credential profile not found"))
-                           {
-                               context.response()
-                                       .setStatusCode(404)
-                                       .end(new JsonObject()
-                                               .put("status.code",404)
-                                               .put("message","Credential profile not found of this ID")
-                                               .put("error",result.cause().getMessage()).encodePrettily());
-                           }
-                           else
-                           {
-                               context.response()
-                                       .setStatusCode(500)
-                                       .end(new JsonObject()
-                                               .put("status.code",500)
-                                               .put("message","Database error while deleting credential profile")
-                                               .put("error",result.cause().getMessage()).encodePrettily());
-                           }
-                       }
+            long id = Long.parseLong(credentialID);
+
+            queryHandler.delete("credentials","profile_id",id)
+                    .onComplete(result -> {
+                        if (result.succeeded()) {
+                            context.response()
+                                    .setStatusCode(200)
+                                    .end(new JsonObject()
+                                            .put("status.code", 200)
+                                            .put("message", "Credential profile deleted successfully").encodePrettily());
+                        }
+                        else
+                        {
+                            if (result.cause().getMessage().contains("Information not found"))
+                            {
+                                context.response()
+                                        .setStatusCode(404)
+                                        .end(new JsonObject()
+                                                .put("status.code", 404)
+                                                .put("message", "Credential profile not found for this ID").encodePrettily());
+                            }
+                            else
+                            {
+                                context.response()
+                                        .setStatusCode(500)
+                                        .end(new JsonObject()
+                                                .put("status.code", 500)
+                                                .put("message", "Database error while deleting credential profile")
+                                                .put("error", result.cause().getMessage()).encodePrettily());
+                            }
+                        }
                     });
+
         }
         catch (Exception exception)
         {
             context.response()
                     .setStatusCode(500)
                     .end(new JsonObject()
-                            .put("status.code",500)
-                            .put("message","Server error in deleting credential profile")
-                            .put("error",exception.getCause().getMessage()).encodePrettily());
+                            .put("status.code", 500)
+                            .put("message", "Server error in deleting credential profile")
+                            .put("error", "Please enter a valid credential profile ID").encodePrettily());
         }
     }
+
 
     //Fetching credential profile
     @Override
     public void get(RoutingContext context)
     {
+        var credentialID = context.pathParam("id");
+
+        if (credentialID == null || credentialID.isEmpty())
+        {
+            context.response()
+                    .setStatusCode(404)
+                    .end(new JsonObject()
+                            .put("status.code", 404)
+                            .put("message", "Please enter a valid credential ID").encodePrettily());
+            return;
+        }
         try
         {
-            credentialQuery.get(Long.parseLong(context.pathParam("id")))
+            long id = Long.parseLong(credentialID);
+
+            queryHandler.get("credentials","profile_id",id)
                     .onComplete(result->{
                         if(result.succeeded())
                         {
@@ -246,14 +308,13 @@ public class Credentials implements CrudOperations
                         }
                         else
                         {
-                            if (result.cause().getMessage().contains("Credential profile not found"))
+                            if (result.cause().getMessage().contains("Information not found"))
                             {
                                 context.response()
                                         .setStatusCode(404)
                                         .end(new JsonObject()
                                                 .put("status.code",404)
-                                                .put("message","Credential profile not found of this ID")
-                                                .put("error",result.cause().getMessage()).encodePrettily());
+                                                .put("message","Credential profile not found of this ID").encodePrettily());
                             }
                             else
                             {
@@ -272,9 +333,9 @@ public class Credentials implements CrudOperations
             context.response()
                     .setStatusCode(500)
                     .end(new JsonObject()
-                            .put("status.code",500)
-                            .put("message","Server error in fetching credential profile for given ID")
-                            .put("error",exception.getCause().getMessage()).encodePrettily());
+                            .put("status.code", 500)
+                            .put("message", "Server error in deleting credential profile")
+                            .put("error", "Please enter a valid credential profile ID").encodePrettily());
         }
     }
 
@@ -284,7 +345,7 @@ public class Credentials implements CrudOperations
     {
         try
         {
-            credentialQuery.getAll()
+            queryHandler.getAll("credentials")
                     .onComplete(result->{
                         if(result.succeeded())
                         {

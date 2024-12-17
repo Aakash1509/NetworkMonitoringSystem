@@ -11,14 +11,20 @@ import io.vertx.ext.web.RoutingContext;
 import io.vertx.ext.web.handler.BodyHandler;
 import io.vertx.ext.web.handler.TimeoutHandler;
 import org.example.database.DiscoveryQuery;
+import org.example.database.QueryUtility;
 import org.example.utils.Config;
 
 
+import java.util.Objects;
+
+import static org.example.Bootstrap.client;
 import static org.example.Bootstrap.vertx;
 
 public class Discovery implements CrudOperations
 {
     private final DiscoveryQuery discoveryQuery = new DiscoveryQuery();
+
+    private final QueryUtility queryHandler = new QueryUtility();
 
     private static final Logger logger = LoggerFactory.getLogger(Discovery.class);
 
@@ -48,19 +54,14 @@ public class Discovery implements CrudOperations
                     .handler(this::get)
                     .failureHandler(this::timeout);
 
-            discoveryRouter.get("/:id/fetch")
-                    .handler(TimeoutHandler.create(5000))
-                    .handler(this::fetchDiscovery)
-                    .failureHandler(this::timeout);
-
             discoveryRouter.delete("/:id")
                     .handler(TimeoutHandler.create(5000))
                     .handler(this::delete)
                     .failureHandler(this::timeout);
 
             discoveryRouter.post("/:id/run")
-                            .handler(TimeoutHandler.create(10000))
-                                    .handler(this::discover)
+                    .handler(TimeoutHandler.create(10000))
+                    .handler(this::discover)
                     .failureHandler(this::timeout);
         }
         catch (Exception exception)
@@ -98,6 +99,17 @@ public class Discovery implements CrudOperations
 
             var credential_profiles = requestBody.getJsonArray("discovery.credential.profiles");
 
+            if(name == null || name.isEmpty() || ip == null || ip.isEmpty() || port == null || credential_profiles == null || credential_profiles.isEmpty())
+            {
+                context.response()
+                        .setStatusCode(500)
+                        .end(new JsonObject()
+                                .put("status.code",500)
+                                .put("message","Please enter required fields").encodePrettily());
+
+                return;
+            }
+
             if (!Config.validIp(ip))
             {
                 context.response()
@@ -119,20 +131,24 @@ public class Discovery implements CrudOperations
             }
 
             // Insert into the database
-            discoveryQuery.insert(name,ip,port,credential_profiles,"DOWN")
+            queryHandler.insert("discoveries",new JsonObject()
+                            .put("name",name)
+                            .put("ip",ip)
+                            .put("port",port)
+                            .put("credential_profiles",credential_profiles)
+                            .put("status","Down"))
                     .onComplete(result->{
                         if(result.succeeded())
                         {
                             Long discoveryID = result.result();
-                            JsonObject response = new JsonObject()
-                                    .put("discovery.id", discoveryID);
-                            
+
                             context.response()
                                     .setStatusCode(201)
                                     .end(new JsonObject()
                                             .put("status.code",201)
                                             .put("message","Discovery created successfully")
-                                            .put("data",response).encodePrettily());
+                                            .put("data",new JsonObject()
+                                                    .put("discovery.id", discoveryID)).encodePrettily());
                         }
                         else
                         {
@@ -160,19 +176,31 @@ public class Discovery implements CrudOperations
     @Override
     public void update(RoutingContext context)
     {
+        var discoveryID = context.pathParam("id");
+
+        var requestBody = context.body().asJsonObject();
+
+        var name = requestBody.getString("discovery.name");
+
+        var ip = requestBody.getString("discovery.ip");
+
+        var port = requestBody.getInteger("discovery.port");
+
+        var credential_profiles = requestBody.getJsonArray("discovery.credential.profiles");
+
+        if(name == null || name.isEmpty() || ip == null || ip.isEmpty() || port == null || credential_profiles == null || credential_profiles.isEmpty())
+        {
+            context.response()
+                    .setStatusCode(500)
+                    .end(new JsonObject()
+                            .put("status.code",500)
+                            .put("message","Please enter required fields").encodePrettily());
+
+            return;
+        }
         try
         {
-            var discoveryID = Long.parseLong(context.pathParam("id"));
-
-            var requestBody = context.body().asJsonObject();
-
-            var name = requestBody.getString("discovery.name");
-
-            var ip = requestBody.getString("discovery.ip");
-
-            var port = requestBody.getInteger("discovery.port");
-
-            var credential_profiles = requestBody.getJsonArray("discovery.credential.profiles");
+            long id = Long.parseLong(discoveryID);
 
             if (!Config.validIp(ip))
             {
@@ -194,7 +222,12 @@ public class Discovery implements CrudOperations
                 return;
             }
 
-            discoveryQuery.update(discoveryID,name,ip,port,credential_profiles)
+            queryHandler.update("discoveries",new JsonObject()
+                            .put("name",name)
+                            .put("ip",ip)
+                            .put("port",port)
+                            .put("credential_profiles",credential_profiles)
+                            .put("discovery_id",id))
                     .onComplete(result->{
                         if(result.succeeded())
                         {
@@ -206,7 +239,7 @@ public class Discovery implements CrudOperations
                         }
                         else
                         {
-                            if (result.cause().getMessage().contains("Discovery not found"))
+                            if (result.cause().getMessage().contains("Information not found"))
                             {
                                 context.response()
                                         .setStatusCode(404)
@@ -244,11 +277,23 @@ public class Discovery implements CrudOperations
     @Override
     public void delete(RoutingContext context)
     {
+
+        var discoveryID = context.pathParam("id");
+
+        if (discoveryID == null || discoveryID.isEmpty())
+        {
+            context.response()
+                    .setStatusCode(404)
+                    .end(new JsonObject()
+                            .put("status.code", 404)
+                            .put("message", "Please enter a valid discovery ID").encodePrettily());
+            return;
+        }
         try
         {
-            var discoveryID = Long.parseLong(context.pathParam("id"));
+            long id = Long.parseLong(discoveryID);
 
-            discoveryQuery.delete(discoveryID)
+            queryHandler.delete("discoveries","discovery_id",id)
                     .onComplete(result->{
                         if(result.succeeded())
                         {
@@ -260,14 +305,13 @@ public class Discovery implements CrudOperations
                         }
                         else
                         {
-                            if (result.cause().getMessage().contains("Discovery not found"))
+                            if (result.cause().getMessage().contains("Information not found"))
                             {
                                 context.response()
                                         .setStatusCode(404)
                                         .end(new JsonObject()
                                                 .put("status.code",404)
-                                                .put("message","Discovery not found of this ID")
-                                                .put("error",result.cause().getMessage()).encodePrettily());
+                                                .put("message","Discovery not found of this ID").encodePrettily());
                             }
                             else
                             {
@@ -296,11 +340,22 @@ public class Discovery implements CrudOperations
     @Override
     public void get(RoutingContext context)
     {
+        var discoveryID = context.pathParam("id");
+
+        if (discoveryID == null || discoveryID.isEmpty())
+        {
+            context.response()
+                    .setStatusCode(404)
+                    .end(new JsonObject()
+                            .put("status.code", 404)
+                            .put("message", "Please enter a valid discovery ID").encodePrettily());
+            return;
+        }
         try
         {
-            var discoveryID = Long.parseLong(context.pathParam("id"));
+            long id = Long.parseLong(discoveryID);
 
-            discoveryQuery.get(discoveryID)
+            queryHandler.get("discoveries","discovery_id",id)
                     .onComplete(result->{
                         if(result.succeeded())
                         {
@@ -313,7 +368,7 @@ public class Discovery implements CrudOperations
                         }
                         else
                         {
-                            if (result.cause().getMessage().contains("Discovery not found"))
+                            if (result.cause().getMessage().contains("Information not found"))
                             {
                                 context.response()
                                         .setStatusCode(404)
@@ -351,7 +406,7 @@ public class Discovery implements CrudOperations
     {
         try
         {
-            discoveryQuery.getAll()
+            queryHandler.getAll("discoveries")
                     .onComplete(result->{
                         if(result.succeeded())
                         {
@@ -398,80 +453,30 @@ public class Discovery implements CrudOperations
         }
     }
 
-    public void fetchDiscovery(RoutingContext context) {
-        try {
-            // Extract the discovery ID from the path parameter
-            Long discoveryID = Long.parseLong(context.pathParam("id"));
-
-            // Execute the query to fetch discovery details using JOIN
-            discoveryQuery.fetch(discoveryID)
-                    .onComplete(result -> {
-                        if (result.succeeded()) {
-                            // Process the result
-                            JsonObject discovery = result.result();
-
-                            // Create response JSON object
-                            JsonObject response = new JsonObject()
-                                    .put("discovery.ip", discovery.getString("discovery.ip"))
-                                    .put("discovery.port", discovery.getString("discovery.port"));
-
-                            // Extract credentials if present
-                            JsonArray credentialsArray = discovery.getJsonArray("discovery.credential.profiles");
-                            if (credentialsArray != null) {
-                                response.put("discovery.credential.profiles", credentialsArray);
-                            } else {
-                                response.put("discovery.credential.profiles", new JsonArray());
-                            }
-
-                            // Send success response
-                            context.response()
-                                    .setStatusCode(200)
-                                    .end(new JsonObject()
-                                            .put("status.code", 200)
-                                            .put("message", "Discovery fetched successfully")
-                                            .put("data", response).encodePrettily());
-                        } else {
-                            // Handle failure cases
-                            if (result.cause().getMessage().contains("No record found")) {
-                                context.response()
-                                        .setStatusCode(404)
-                                        .end(new JsonObject()
-                                                .put("status.code", 404)
-                                                .put("message", "Discovery not found for this ID")
-                                                .put("error", result.cause().getMessage()).encodePrettily());
-                            } else {
-                                context.response()
-                                        .setStatusCode(500)
-                                        .end(new JsonObject()
-                                                .put("status.code", 500)
-                                                .put("message", "Database error while fetching discovery")
-                                                .put("error", result.cause().getMessage()).encodePrettily());
-                            }
-                        }
-                    });
-        } catch (Exception exception) {
-            context.response()
-                    .setStatusCode(500)
-                    .end(new JsonObject()
-                            .put("status.code", 500)
-                            .put("message", "Server error in fetching discovery for given ID")
-                            .put("error", exception.getMessage()).encodePrettily());
-        }
-    }
-
     //Checking if device is up
     private void discover(RoutingContext context)
     {
+        var discoveryID = context.pathParam("id");
+
+        if (discoveryID == null || discoveryID.isEmpty())
+        {
+            context.response()
+                    .setStatusCode(404)
+                    .end(new JsonObject()
+                            .put("status.code", 404)
+                            .put("message", "Please enter a valid discovery ID").encodePrettily());
+            return;
+        }
         try
         {
-            var discoveryID = Long.parseLong(context.pathParam("id"));
+            long id = Long.parseLong(discoveryID);
 
             // Function will be here to check whether device is provisioned already or not
-            discoveryQuery.fetch(discoveryID)
+            queryHandler.get("discoveries","discovery_id",id)
                     .compose(deviceInfo -> vertx.<JsonObject>executeBlocking(pingFuture -> {
                         try
                         {
-                            if (Config.ping(deviceInfo.getString("discovery.ip")))
+                            if (Config.ping(deviceInfo.getString("ip")))
                             {
                                 pingFuture.complete(deviceInfo);
                             }
@@ -488,13 +493,20 @@ public class Discovery implements CrudOperations
                     .compose(deviceInfo -> {
                         try
                         {
-                            if (Config.isPortOpen(deviceInfo.getString("discovery.ip"), deviceInfo.getInteger("discovery.port")))
+                            if(Objects.equals(deviceInfo.getString("discovery.protocol"), "SSH"))
                             {
-                                return Future.succeededFuture(deviceInfo);
+                                if (Config.isPortOpen(deviceInfo.getString("discovery.ip"), deviceInfo.getInteger("discovery.port")))
+                                {
+                                    return Future.succeededFuture(deviceInfo);
+                                }
+                                else
+                                {
+                                    return Future.failedFuture("Ping done but port is closed for an SSH connection");
+                                }
                             }
                             else
                             {
-                                return Future.failedFuture("Ping done but port is closed");
+                                return Future.succeededFuture(deviceInfo);
                             }
                         }
                         catch (Exception exception)
@@ -516,7 +528,7 @@ public class Discovery implements CrudOperations
                         try
                         {
                             // Update the status in the database
-                            return discoveryQuery.updateStatus(deviceInfo.getLong("credential.profile"), deviceInfo.getString("status"), deviceInfo.getString("hostname"),discoveryID)
+                            return discoveryQuery.updateStatus(deviceInfo.getLong("credential.profile"), deviceInfo.getString("status"), deviceInfo.getString("hostname"),id)
                                     .compose(updateResult -> {
                                         if (updateResult)
                                         {
@@ -573,7 +585,3 @@ public class Discovery implements CrudOperations
     }
 
 }
-
-
-
-

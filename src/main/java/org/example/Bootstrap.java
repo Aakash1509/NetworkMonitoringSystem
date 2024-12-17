@@ -4,7 +4,6 @@ import io.vertx.core.Vertx;
 import io.vertx.core.impl.logging.Logger;
 import io.vertx.core.impl.logging.LoggerFactory;
 import io.vertx.pgclient.PgPool;
-import org.example.routes.Discovery;
 import org.example.utils.Database;
 import org.example.routes.Server;
 
@@ -14,7 +13,7 @@ public class Bootstrap
 
     public static final PgPool client = Database.client;
 
-    private static final Logger logger = LoggerFactory.getLogger(Discovery.class);
+    private static final Logger logger = LoggerFactory.getLogger(Bootstrap.class);
 
     public static void main(String[] args)
     {
