@@ -4,7 +4,7 @@ import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Promise;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.Router;
-import org.example.utils.Config;
+import org.example.store.Config;
 
 public class Server extends AbstractVerticle
 {
@@ -57,7 +57,7 @@ public class Server extends AbstractVerticle
                         end(new JsonObject()
                                 .put("status.code",404)
                                 .put("message","Error occurred")
-                                .put("error",ctx.failure().getMessage()).encodePrettily());
+                                .put("error",ctx.failure()).encodePrettily());
             }
         });
 

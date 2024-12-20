@@ -1,71 +1,37 @@
 package org.example.routes;
 
+import io.vertx.core.Future;
 import io.vertx.core.impl.logging.Logger;
 import io.vertx.core.impl.logging.LoggerFactory;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.Router;
 import io.vertx.ext.web.RoutingContext;
 import io.vertx.ext.web.handler.BodyHandler;
-import io.vertx.ext.web.handler.TimeoutHandler;
-import org.example.database.CredentialQuery;
 import org.example.database.QueryUtility;
+
+import java.util.List;
 
 public class Credentials implements CrudOperations
 {
-    private final CredentialQuery credentialQuery = new CredentialQuery();
-
-    private final QueryUtility queryHandler = new QueryUtility();
-
     private static final Logger logger = LoggerFactory.getLogger(Credentials.class);
     
     public void route(Router credentialRouter) 
     {
         try
         {
-            credentialRouter.post("/create")
-                    .handler(TimeoutHandler.create(5000))
-                    .handler(BodyHandler.create())
-                    .handler(this::create)
-                    .failureHandler(this::timeout);
+            credentialRouter.post("/create").handler(BodyHandler.create()).handler(this::create);
 
-            credentialRouter.put("/:id")
-                    .handler(TimeoutHandler.create(5000))
-                    .handler(BodyHandler.create())
-                    .handler(this::update)
-                    .failureHandler(this::timeout);
+            credentialRouter.put("/:id").handler(BodyHandler.create()).handler(this::update);
 
-            credentialRouter.get("/getAll")
-                    .handler(TimeoutHandler.create(5000))
-                    .handler(this::getAll)
-                    .failureHandler(this::timeout);
+            credentialRouter.get("/getAll").handler(this::getAll);
 
-            credentialRouter.get("/:id")
-                    .handler(TimeoutHandler.create(5000))
-                    .handler(this::get)
-                    .failureHandler(this::timeout);
+            credentialRouter.get("/:id").handler(this::get);
 
-            credentialRouter.delete("/:id")
-                    .handler(TimeoutHandler.create(5000))
-                    .handler(this::delete)
-                    .failureHandler(this::timeout);
+            credentialRouter.delete("/:id").handler(this::delete);
         }
         catch (Exception exception)
         {
             logger.error("Error in credential routing", exception);
-        }
-    }
-
-    private void timeout(RoutingContext context)
-    {
-        if (!context.response().ended())
-        {
-            context.response()
-                .setStatusCode(408)
-                .end(new JsonObject()
-                        .put("status.code",408)
-                        .put("message","Request Timed Out")
-                        .put("error","The server timed out waiting for the request").encodePrettily());
-            
         }
     }
 
@@ -92,14 +58,30 @@ public class Credentials implements CrudOperations
                 return;
             }
 
-            queryHandler.insert("credentials",new JsonObject()
-                            .put("profile_name",name)
-                            .put("profile_protocol",protocol)
-                            .put("user_name",requestBody.getString("user.name"))
-                            .put("user_password",requestBody.getString("user.password"))
-                            .put("community",requestBody.getString("community"))
-                            .put("version",requestBody.getString("version")))
-                    .onComplete(result->{
+            List<String> columns = List.of("profile_id");
+
+            QueryUtility.getInstance().get("credentials", columns, new JsonObject().put("name", name))
+                    .compose(result ->
+                    {
+                        if (!result.containsKey("error"))
+                        {
+                            // If discovery name already exists, return a failed future
+                            return Future.failedFuture("Credential profile name should be unique");
+                        }
+                        else
+                        {
+                            // If name is unique, insert
+                            return QueryUtility.getInstance().insert("credentials",new JsonObject()
+                                    .put("profile_name",name)
+                                    .put("profile_protocol",protocol)
+                                    .put("user_name",requestBody.getString("user.name"))
+                                    .put("user_password",requestBody.getString("user.password"))
+                                    .put("community",requestBody.getString("community"))
+                                    .put("version",requestBody.getString("version")));
+                        }
+                    })
+                    .onComplete(result->
+                    {
                         if (result.succeeded())
                         {
                             var profileId = result.result();
@@ -160,18 +142,33 @@ public class Credentials implements CrudOperations
         }
         try
         {
-
             long id = Long.parseLong(credentialID);
 
-            queryHandler.update("credentials",new JsonObject()
-                            .put("profile_name",name)
-                            .put("profile_protocol",protocol)
-                            .put("user_name",requestBody.getString("user.name"))
-                            .put("user_password",requestBody.getString("user.password"))
-                            .put("community",requestBody.getString("community"))
-                            .put("version",requestBody.getString("version"))
-                            .put("profile_id",id))
-                    .onComplete(result->{
+            List<String> columns = List.of("profile_id");
+
+            QueryUtility.getInstance().get("credentials", columns, new JsonObject().put("name", name))
+                    .compose(result ->
+                    {
+                        if (!result.containsKey("error"))
+                        {
+                            // If discovery name already exists, return a failed future
+                            return Future.failedFuture("Credential profile name should be unique");
+                        }
+                        else
+                        {
+                            // If name is unique, update
+                            return QueryUtility.getInstance().update("credentials",new JsonObject()
+                                    .put("profile_name",name)
+                                    .put("profile_protocol",protocol)
+                                    .put("user_name",requestBody.getString("user.name"))
+                                    .put("user_password",requestBody.getString("user.password"))
+                                    .put("community",requestBody.getString("community"))
+                                    .put("version",requestBody.getString("version")),new JsonObject().put("profile_id",id));
+                        }
+                    })
+
+                    .onComplete(result->
+                    {
                        if(result.succeeded())
                        {
                            context.response()
@@ -232,8 +229,9 @@ public class Credentials implements CrudOperations
         {
             long id = Long.parseLong(credentialID);
 
-            queryHandler.delete("credentials","profile_id",id)
-                    .onComplete(result -> {
+            QueryUtility.getInstance().delete("credentials","profile_id",id)
+                    .onComplete(result ->
+                    {
                         if (result.succeeded()) {
                             context.response()
                                     .setStatusCode(200)
@@ -295,8 +293,11 @@ public class Credentials implements CrudOperations
         {
             long id = Long.parseLong(credentialID);
 
-            queryHandler.get("credentials","profile_id",id)
-                    .onComplete(result->{
+            List<String> columns = List.of("profile_name", "profile_protocol", "user_name","user_password","community","version");
+
+            QueryUtility.getInstance().get("credentials",columns,new JsonObject().put("profile_id",id))
+                    .onComplete(result->
+                    {
                         if(result.succeeded())
                         {
                             context.response()
@@ -308,7 +309,7 @@ public class Credentials implements CrudOperations
                         }
                         else
                         {
-                            if (result.cause().getMessage().contains("Information not found"))
+                            if (result.result().containsKey("error"))
                             {
                                 context.response()
                                         .setStatusCode(404)
@@ -345,8 +346,9 @@ public class Credentials implements CrudOperations
     {
         try
         {
-            queryHandler.getAll("credentials")
-                    .onComplete(result->{
+            QueryUtility.getInstance().getAll("credentials")
+                    .onComplete(result->
+                    {
                         if(result.succeeded())
                         {
                             var credentials = result.result();

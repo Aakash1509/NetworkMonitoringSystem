@@ -1,7 +1,7 @@
 package org.example.routes;
 
+import io.vertx.core.CompositeFuture;
 import io.vertx.core.Future;
-import io.vertx.core.Promise;
 import io.vertx.core.impl.logging.Logger;
 import io.vertx.core.impl.logging.LoggerFactory;
 import io.vertx.core.json.JsonArray;
@@ -9,60 +9,35 @@ import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.Router;
 import io.vertx.ext.web.RoutingContext;
 import io.vertx.ext.web.handler.BodyHandler;
-import io.vertx.ext.web.handler.TimeoutHandler;
-import org.example.database.DiscoveryQuery;
 import org.example.database.QueryUtility;
-import org.example.utils.Config;
+import org.example.store.Util;
 
+import java.util.ArrayList;
+import java.util.List;
 
-import java.util.Objects;
-
-import static org.example.Bootstrap.client;
 import static org.example.Bootstrap.vertx;
 
 public class Discovery implements CrudOperations
 {
-    private final DiscoveryQuery discoveryQuery = new DiscoveryQuery();
-
-    private final QueryUtility queryHandler = new QueryUtility();
-
     private static final Logger logger = LoggerFactory.getLogger(Discovery.class);
 
     public void route(Router discoveryRouter)
     {
         try
         {
-            discoveryRouter.post("/create")
-                    .handler(TimeoutHandler.create(5000))
-                    .handler(BodyHandler.create())
-                    .handler(this::create)
-                    .failureHandler(this::timeout);
+            discoveryRouter.post("/create").handler(BodyHandler.create()).handler(this::create);
 
-            discoveryRouter.put("/:id")
-                    .handler(TimeoutHandler.create(5000))
-                    .handler(BodyHandler.create())
-                    .handler(this::update)
-                    .failureHandler(this::timeout);
+            discoveryRouter.put("/:id").handler(BodyHandler.create()).handler(this::update);
 
-            discoveryRouter.get("/getAll")
-                    .handler(TimeoutHandler.create(5000))
-                    .handler(this::getAll)
-                    .failureHandler(this::timeout);
+            discoveryRouter.get("/getAll").handler(this::getAll);
 
-            discoveryRouter.get("/:id")
-                    .handler(TimeoutHandler.create(5000))
-                    .handler(this::get)
-                    .failureHandler(this::timeout);
+            discoveryRouter.get("/:id").handler(this::get);
 
-            discoveryRouter.delete("/:id")
-                    .handler(TimeoutHandler.create(5000))
-                    .handler(this::delete)
-                    .failureHandler(this::timeout);
+            discoveryRouter.delete("/:id").handler(this::delete);
 
-            discoveryRouter.post("/:id/run")
-                    .handler(TimeoutHandler.create(10000))
-                    .handler(this::discover)
-                    .failureHandler(this::timeout);
+            discoveryRouter.post("/:id/run").handler(this::discover);
+
+//            discoveryRouter.post("/test").handler(ctx-> new Discovery().test(ctx));
         }
         catch (Exception exception)
         {
@@ -70,18 +45,52 @@ public class Discovery implements CrudOperations
         }
     }
 
-    private void timeout(RoutingContext context)
+    /*
+    private void test(RoutingContext context)
     {
-        if (!context.response().ended())
-        {
-            context.response()
-                    .setStatusCode(408)
-                    .end(new JsonObject()
-                            .put("status.code",408)
-                            .put("message","Request Timed Out")
-                            .put("error","The server timed out waiting for the request").encodePrettily());
+        System.out.println("hello");
+        JsonObject templateProfile = new JsonObject()
+                .put("profile_name", "YYY")
+                .put("profile_protocol", "SSH")
+                .put("user_name", "yyy")
+                .put("user_password", "Mind@123")
+                .put("community", "")
+                .put("version", "");
+
+        for (int i = 1; i <= 50; i++) {
+            System.out.println("inside insert");
+            JsonObject profile = templateProfile.copy()
+                    .put("profile_name", "YYY_" + i);
+
+            QueryUtility.getInstance().insert("credentials",profile)
+                    .onComplete(result -> {
+                        if (result.succeeded()) {
+                            System.out.println("Generated ID : "+result.result());
+                        }
+                    });
         }
+
+
+        long startProfileId = 2024000000139L;
+
+        for (int i = 0; i <= 50; i++) {
+            long profileId = startProfileId + i;
+
+            List<String> columns = List.of("profile_name", "profile_protocol", "user_name", "user_password", "community", "version");
+
+            QueryUtility.getInstance().get("credentials", columns, new JsonObject().put("profile_id", profileId))
+                    .onComplete(result -> {
+                        if (result.succeeded()) {
+                            System.out.println(result.result().encodePrettily());
+                        }
+                    });
+        }
+
+
+        System.out.println("Process completed");
     }
+
+     */
 
     //Creating discovery
     @Override
@@ -110,7 +119,7 @@ public class Discovery implements CrudOperations
                 return;
             }
 
-            if (!Config.validIp(ip))
+            if (!Util.validIp(ip))
             {
                 context.response()
                         .setStatusCode(400)
@@ -120,7 +129,7 @@ public class Discovery implements CrudOperations
                 return;
             }
 
-            if (Config.validPort(port))
+            if (Util.validPort(port))
             {
                 context.response()
                         .setStatusCode(400)
@@ -130,25 +139,36 @@ public class Discovery implements CrudOperations
                 return;
             }
 
-            // Insert into the database
-            queryHandler.insert("discoveries",new JsonObject()
-                            .put("name",name)
-                            .put("ip",ip)
-                            .put("port",port)
-                            .put("credential_profiles",credential_profiles)
-                            .put("status","Down"))
-                    .onComplete(result->{
+            List<String> columns = List.of("discovery_id");
+
+            QueryUtility.getInstance().get("discoveries", columns, new JsonObject().put("name", name))
+                    .compose(result ->
+                    {
+                        if (!result.containsKey("error"))
+                        {
+                            // If discovery name already exists, return a failed future
+                            return Future.failedFuture("Discovery name should be unique");
+                        }
+                        else
+                        {
+                            // If name is unique, insert
+                            return QueryUtility.getInstance().insert("discoveries",new JsonObject()
+                                    .put("name",name)
+                                    .put("ip",ip)
+                                    .put("port",port)
+                                    .put("credential_profiles",credential_profiles)
+                                    .put("status","Down"));
+                        }
+                    })
+                    .onComplete(result->
+                    {
                         if(result.succeeded())
                         {
                             Long discoveryID = result.result();
 
-                            context.response()
-                                    .setStatusCode(201)
-                                    .end(new JsonObject()
-                                            .put("status.code",201)
-                                            .put("message","Discovery created successfully")
-                                            .put("data",new JsonObject()
-                                                    .put("discovery.id", discoveryID)).encodePrettily());
+                            context.response().setStatusCode(201).end(new JsonObject()
+                                            .put("status.code",201).put("message","Discovery created successfully")
+                                            .put("data",new JsonObject().put("discovery.id", discoveryID)).encodePrettily());
                         }
                         else
                         {
@@ -200,9 +220,7 @@ public class Discovery implements CrudOperations
         }
         try
         {
-            long id = Long.parseLong(discoveryID);
-
-            if (!Config.validIp(ip))
+            if (!Util.validIp(ip))
             {
                 context.response()
                         .setStatusCode(400)
@@ -212,7 +230,7 @@ public class Discovery implements CrudOperations
                 return;
             }
 
-            if (Config.validPort(port))
+            if (Util.validPort(port))
             {
                 context.response()
                         .setStatusCode(400)
@@ -222,13 +240,30 @@ public class Discovery implements CrudOperations
                 return;
             }
 
-            queryHandler.update("discoveries",new JsonObject()
-                            .put("name",name)
-                            .put("ip",ip)
-                            .put("port",port)
-                            .put("credential_profiles",credential_profiles)
-                            .put("discovery_id",id))
-                    .onComplete(result->{
+            long id = Long.parseLong(discoveryID);
+
+            List<String> columns = List.of("discovery_id");
+
+            QueryUtility.getInstance().get("discoveries", columns, new JsonObject().put("name", name))
+                    .compose(result ->
+                    {
+                        if (!result.containsKey("error"))
+                        {
+                            // If discovery name already exists, return a failed future
+                            return Future.failedFuture("Discovery name should be unique");
+                        }
+                        else
+                        {
+                            // If name is unique, insert
+                            return QueryUtility.getInstance().update("discoveries",new JsonObject()
+                                    .put("name",name)
+                                    .put("ip",ip)
+                                    .put("port",port)
+                                    .put("credential_profiles",credential_profiles),new JsonObject().put("discovery_id",id));
+                        }
+                    })
+                    .onComplete(result->
+                    {
                         if(result.succeeded())
                         {
                             context.response()
@@ -293,8 +328,9 @@ public class Discovery implements CrudOperations
         {
             long id = Long.parseLong(discoveryID);
 
-            queryHandler.delete("discoveries","discovery_id",id)
-                    .onComplete(result->{
+            QueryUtility.getInstance().delete("discoveries","discovery_id",id)
+                    .onComplete(result->
+                    {
                         if(result.succeeded())
                         {
                             context.response()
@@ -355,8 +391,11 @@ public class Discovery implements CrudOperations
         {
             long id = Long.parseLong(discoveryID);
 
-            queryHandler.get("discoveries","discovery_id",id)
-                    .onComplete(result->{
+            List<String> columns = List.of("credential_profile", "name", "ip","port","credential_profiles","status","hostname");
+
+            QueryUtility.getInstance().get("discoveries",columns,new JsonObject().put("discovery_id",id))
+                    .onComplete(result->
+                    {
                         if(result.succeeded())
                         {
                             context.response()
@@ -368,7 +407,7 @@ public class Discovery implements CrudOperations
                         }
                         else
                         {
-                            if (result.cause().getMessage().contains("Information not found"))
+                            if (result.result().containsKey("error"))
                             {
                                 context.response()
                                         .setStatusCode(404)
@@ -406,8 +445,9 @@ public class Discovery implements CrudOperations
     {
         try
         {
-            queryHandler.getAll("discoveries")
-                    .onComplete(result->{
+            QueryUtility.getInstance().getAll("discoveries")
+                    .onComplete(result->
+                    {
                         if(result.succeeded())
                         {
                             var discoveries = result.result();
@@ -471,12 +511,84 @@ public class Discovery implements CrudOperations
         {
             long id = Long.parseLong(discoveryID);
 
-            // Function will be here to check whether device is provisioned already or not
-            queryHandler.get("discoveries","discovery_id",id)
-                    .compose(deviceInfo -> vertx.<JsonObject>executeBlocking(pingFuture -> {
+            List<String> columns = List.of("ip","port","credential_profiles");
+
+                //I will check whether this discovery ID is present in database or not
+                QueryUtility.getInstance().get("discoveries",columns,new JsonObject().put("discovery_id",id))
+                        .compose(deviceInfo->
+                        {
+                            if (deviceInfo.containsKey("error"))
+                            {
+                                return Future.failedFuture("This discovery ID was not found in the database");
+                            }
+
+                            List<String> values = List.of("object_id");
+
+                            // Then I will check whether device is provisioned already or not
+                            return QueryUtility.getInstance().get("objects", values, new JsonObject().put("ip", deviceInfo.getString("ip")))
+                                    .compose(objectInfo ->
+                                    {
+                                        if (!objectInfo.containsKey("error"))
+                                        {
+                                            return Future.failedFuture("Device is already provisioned");
+                                        }
+
+                                        return Future.succeededFuture(deviceInfo);
+                                    });
+                        })
+                    .compose(deviceInfo->
+                    {
+
+                        var profiles = deviceInfo.getJsonArray("credential_profiles");
+
+                        List<Future>credentialFutures = new ArrayList<>();
+
+                        if(profiles.isEmpty())
+                        {
+                            return Future.failedFuture("No credential profiles found for this ID");
+                        }
+                        for (int i = 0; i < profiles.size(); i++)
+                        {
+                            Long profileID = profiles.getLong(i);
+
+                            List<String> fields = List.of("profile_id,profile_protocol","user_name","user_password","community","version");
+
+                            Future<JsonObject> credentialFuture = QueryUtility.getInstance().get("credentials", fields, new JsonObject().put("profile_id",profileID))
+
+                                    .onSuccess(result -> {
+                                        logger.info("Credential fetch succeeded for profile ID " + profileID);
+                                    })
+                                    .onFailure(err -> {
+                                        logger.error("Credential for profile ID " + profileID + " not found: " + err.getMessage());
+                                    });
+
+                            credentialFutures.add(credentialFuture);
+                        }
+
+                        return CompositeFuture.join(credentialFutures)
+                                .map(compositeFuture ->
+                                {
+                                    var profileData = new JsonArray();
+
+                                    for (int i = 0; i < compositeFuture.size(); i++)
+                                    {
+                                        JsonObject result = compositeFuture.resultAt(i);
+
+                                        if (!result.containsKey("error"))
+                                        {
+                                            profileData.add(result);
+                                        }
+                                    }
+                                    deviceInfo.put("discovery.credential.profiles", profileData);
+
+                                    return deviceInfo;
+                                });
+                    })
+                    .compose(deviceInfo -> vertx.<JsonObject>executeBlocking(pingFuture ->
+                    {
                         try
                         {
-                            if (Config.ping(deviceInfo.getString("ip")))
+                            if (Util.ping(deviceInfo.getString("ip")))
                             {
                                 pingFuture.complete(deviceInfo);
                             }
@@ -490,31 +602,45 @@ public class Discovery implements CrudOperations
                             pingFuture.fail("Error during ping: " + exception.getMessage());
                         }
                     }))
-                    .compose(deviceInfo -> {
+                    .compose(deviceInfo ->
+                    {
                         try
                         {
-                            if(Objects.equals(deviceInfo.getString("discovery.protocol"), "SSH"))
-                            {
-                                if (Config.isPortOpen(deviceInfo.getString("discovery.ip"), deviceInfo.getInteger("discovery.port")))
-                                {
-                                    return Future.succeededFuture(deviceInfo);
-                                }
-                                else
-                                {
-                                    return Future.failedFuture("Ping done but port is closed for an SSH connection");
-                                }
-                            }
-                            else
-                            {
-                                return Future.succeededFuture(deviceInfo);
-                            }
+                            QueryUtility.getInstance().get("discoveries", List.of("port"), new JsonObject().put("discovery_id", id))
+                                    .compose(portResult ->
+                                    {
+                                        Integer port = portResult.getInteger("port");
+
+                                        if (port == 161)
+                                        {
+                                            return Future.succeededFuture(deviceInfo);
+                                        }
+
+                                        // Check if the port is open
+                                        return Future.future(promise ->
+                                        {
+                                            if (Util.isPortOpen(deviceInfo.getString("ip"), port))
+                                            {
+                                                promise.complete(deviceInfo);
+                                            }
+                                            else
+                                            {
+                                                promise.fail("Ping done but port is closed for the specified connection");
+                                            }
+
+                                        });
+                                    });
                         }
                         catch (Exception exception)
                         {
-                            return Future.failedFuture("Error during port check: " + exception.getMessage());
+                            return Future.failedFuture("There was problem in fetching port");
                         }
+
+                        return Future.succeededFuture(deviceInfo);
+
                     })
-                    .compose(deviceInfo -> {
+                    .compose(deviceInfo ->
+                    {
                         try
                         {
                             return validCredential(deviceInfo);
@@ -524,11 +650,14 @@ public class Discovery implements CrudOperations
                             return Future.failedFuture("Error during finding valid credential profile " + exception.getMessage());
                         }
                     })
-                    .compose(deviceInfo -> {
+                    .compose(deviceInfo ->
+                    {
                         try
                         {
-                            // Update the status in the database
-                            return discoveryQuery.updateStatus(deviceInfo.getLong("credential.profile"), deviceInfo.getString("status"), deviceInfo.getString("hostname"),id)
+                            // Update the status in the database after removing credential profiles
+                            deviceInfo.remove("discovery.credential.profiles");
+
+                            return QueryUtility.getInstance().update("discoveries",deviceInfo,new JsonObject().put("discovery_id",id))
                                     .compose(updateResult -> {
                                         if (updateResult)
                                         {
@@ -536,7 +665,7 @@ public class Discovery implements CrudOperations
                                         }
                                         else
                                         {
-                                            return Future.failedFuture("Failed to update the database for discoveryID: " + discoveryID);
+                                            return Future.failedFuture("Failed to update the database for the discoveryID");
                                         }
                                     });
                         }
@@ -562,18 +691,22 @@ public class Discovery implements CrudOperations
 
     private Future<JsonObject> validCredential(JsonObject deviceInfo)
     {
-        return vertx.executeBlocking(promise -> {
+        return vertx.executeBlocking(promise ->
+        {
             try
             {
-                if (Config.checkConnection(deviceInfo))
+                if (Util.checkConnection(deviceInfo))
                 {
                     deviceInfo.put("status", "Up");
                 }
                 else
                 {
+                    deviceInfo.put("credential_profile", null);
+
                     deviceInfo.put("status", "Down");
-                    deviceInfo.put("credential.profile", null);
+
                     deviceInfo.put("hostname", null);
+
                 }
                 promise.complete(deviceInfo);
             }

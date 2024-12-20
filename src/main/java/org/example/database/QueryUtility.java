@@ -4,17 +4,55 @@ import io.vertx.core.Future;
 import io.vertx.core.Promise;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
+import io.vertx.pgclient.PgConnectOptions;
+import io.vertx.pgclient.PgPool;
+import io.vertx.sqlclient.PoolOptions;
 import io.vertx.sqlclient.Row;
 import io.vertx.sqlclient.RowSet;
 import io.vertx.sqlclient.Tuple;
+import org.example.Bootstrap;
+import org.example.store.Config;
 
 import java.util.ArrayList;
 import java.util.List;
 
-import static org.example.Bootstrap.client;
-
 public class QueryUtility
 {
+    private static QueryUtility instance;
+
+    private QueryUtility()
+    {
+
+    }
+
+    public static QueryUtility getInstance()
+    {
+        if(instance==null)
+        {
+            instance = new QueryUtility();
+        }
+        return instance;
+    }
+
+    private static PgPool client;
+
+    static
+    {
+        // Database connection options
+        PgConnectOptions connectOptions = new PgConnectOptions()
+                .setPort(Config.DB_PORT)
+                .setHost(Config.DB_HOST)
+                .setDatabase(Config.DB_DATABASE)
+                .setUser(Config.DB_USER)
+                .setPassword(Config.DB_PASSWORD);
+
+        // Pool options
+        PoolOptions poolOptions = new PoolOptions()
+                .setMaxSize(Config.POOL_SIZE); // Maximum connections in the pool
+
+        // Create client
+        client = PgPool.pool(Bootstrap.vertx, connectOptions, poolOptions);
+    }
 
     public Future<Long> insert(String tableName, JsonObject data)
     {
@@ -26,7 +64,8 @@ public class QueryUtility
 
         List<Object> values = new ArrayList<>();
 
-        data.forEach(entry -> {
+        data.forEach(entry ->
+        {
             columns.append(entry.getKey()).append(", ");
 
             placeholders.append("$").append(values.size() + 1).append(", ");
@@ -43,6 +82,7 @@ public class QueryUtility
                     if (execute.succeeded())
                     {
                         RowSet<Row> rows = execute.result();
+
                         if (rows.size() > 0)
                         {
                             var id = rows.iterator().next().getLong(0);
@@ -56,66 +96,9 @@ public class QueryUtility
                     }
                     else
                     {
-                        var error = execute.cause().getMessage();
-
-                        if(error.contains("credentials_profile_name_key"))
-                        {
-                            promise.fail("Credential profile name must be unique");
-                        }
-                        else if(error.contains("check_protocol_fields"))
-                        {
-                            promise.fail("Please enter necessary details according to your required protocol");
-                        }
-                        else if(error.contains("unique_name"))
-                        {
-                            promise.fail("Discovery name must be unique");
-                        }
-                        else
-                        {
-                            promise.fail(error);
-                        }
+                        promise.fail(execute.cause().getMessage());
                     }
                 });
-        return promise.future();
-    }
-
-    public Future<JsonObject> get(String tableName, String column, Long id)
-    {
-        Promise<JsonObject> promise = Promise.promise();
-
-        client.preparedQuery("SELECT * FROM " + tableName + " WHERE " + column + " = $1")
-                .execute(Tuple.of(id),execute->{
-                    if(execute.succeeded())
-                    {
-                        RowSet<Row> rows = execute.result();
-
-                        if (rows.iterator().hasNext()) {
-                            Row row = rows.iterator().next();
-
-                            // Convert the Row into a JsonObject
-                            var response = new JsonObject();
-
-                            for (int i = 0; i < row.size(); i++)
-                            {
-                                var fieldName = row.getColumnName(i);
-
-                                var value = row.getValue(i);
-
-                                response.put(fieldName, value);
-                            }
-                            promise.complete(response);
-                        }
-                        else
-                        {
-                            promise.fail("Information not found");
-                        }
-                    }
-                    else
-                    {
-                        promise.fail(execute.cause());
-                    }
-                });
-
         return promise.future();
     }
 
@@ -183,9 +166,73 @@ public class QueryUtility
         return promise.future();
     }
 
-    public Future<Void> update(String tableName, JsonObject data)
+    public Future<JsonObject> get(String tableName, List<String> columns, JsonObject filter)
     {
-        Promise<Void> promise= Promise.promise();
+        Promise<JsonObject> promise = Promise.promise();
+
+        String selectClause = columns.isEmpty() ? "*" : String.join(", ", columns);
+
+        var whereClause = new StringBuilder();
+
+        var values = new ArrayList<>();
+
+        filter.forEach(entry ->
+        {
+            if (!whereClause.isEmpty())
+            {
+                whereClause.append(" AND ");
+            }
+
+            whereClause.append(entry.getKey()).append(" = $").append(values.size() + 1);
+
+            values.add(entry.getValue());
+        });
+
+        // Prepare the SQL query
+        String query = "SELECT " + selectClause + " FROM " + tableName + " WHERE " + whereClause;
+
+        client.preparedQuery(query)
+                .execute(Tuple.from(values), execute ->
+                {
+                    if (execute.succeeded())
+                    {
+                        RowSet<Row> rows = execute.result();
+
+                        if (rows.iterator().hasNext())
+                        {
+                            Row row = rows.iterator().next();
+
+                            // Convert the Row into a JsonObject
+                            var response = new JsonObject();
+
+                            for (int i = 0; i < row.size(); i++)
+                            {
+                                var fieldName = row.getColumnName(i);
+
+                                var fieldValue = row.getValue(i);
+
+                                response.put(fieldName, fieldValue);
+                            }
+                            promise.complete(response);
+                        }
+                        else
+                        {
+                            promise.complete(new JsonObject().put("error", "No matching record found"));
+                        }
+                    }
+                    else
+                    {
+                        promise.fail(execute.cause().getMessage());
+                    }
+                });
+
+        return promise.future();
+    }
+
+
+    public Future<Boolean> update(String tableName, JsonObject data, JsonObject filter)
+    {
+        Promise<Boolean> promise = Promise.promise();
 
         var setClause = new StringBuilder();
 
@@ -193,13 +240,9 @@ public class QueryUtility
 
         var values = new ArrayList<>();
 
-        var keys = new ArrayList<>(data.fieldNames()); //To get last key for where clause
-
-        String lastKey = keys.get(keys.size() - 1);
-
-        var value = data.getValue(lastKey);
-
-        data.forEach(entry -> {
+        // Construct the SET clause
+        data.forEach(entry ->
+        {
             if (!setClause.isEmpty())
             {
                 setClause.append(", ");
@@ -208,49 +251,45 @@ public class QueryUtility
             setClause.append(entry.getKey()).append(" = $").append(values.size() + 1);
 
             values.add(entry.getValue());
-
         });
 
-        whereClause.append(lastKey).append(" = $").append(values.size() + 1);
+        // Construct the WHERE clause
+        filter.forEach(entry ->
+        {
+            if (!whereClause.isEmpty())
+            {
+                whereClause.append(" AND ");
+            }
+            whereClause.append(entry.getKey()).append(" = $").append(values.size() + 1);
 
-        values.add(value);
+            values.add(entry.getValue());
+        });
 
-        client.preparedQuery("UPDATE " + tableName + " SET " + setClause + " WHERE " + whereClause)
-                .execute(Tuple.from(values),execute->{
-                   if(execute.succeeded())
-                   {
-                       if (execute.result().rowCount() > 0)
-                       {
-                           promise.complete(); // Update succeeded
-                       }
-                       else
-                       {
-                           promise.fail("Information not found");
-                       }
-                   }
-                   else
-                   {
-                       var error = execute.cause().getMessage();
+        // Construct the final query
+        String query = "UPDATE " + tableName + " SET " + setClause + " WHERE " + whereClause;
 
-                       if(error.contains("credentials_profile_name_key"))
-                       {
-                           promise.fail("Credential profile name must be unique");
-                       }
-                       else if(error.contains("check_protocol_fields"))
-                       {
-                           promise.fail("Please enter necessary details according to your required protocol");
-                       }
-                       else if(error.contains("unique_name"))
-                       {
-                           promise.fail("Discovery name must be unique");
-                       }
-                       else
-                       {
-                           promise.fail(error);
-                       }
-                   }
+        // Execute the query
+        client.preparedQuery(query)
+                .execute(Tuple.from(values), execute ->
+                {
+                    if (execute.succeeded())
+                    {
+                        if (execute.result().rowCount() > 0)
+                        {
+                            promise.complete(true); // Update succeeded
+                        }
+                        else
+                        {
+                            promise.complete(false); // No rows updated
+                        }
+                    }
+                    else
+                    {
+                        promise.fail(execute.cause().getMessage());
+                    }
                 });
 
         return promise.future();
     }
+
 }

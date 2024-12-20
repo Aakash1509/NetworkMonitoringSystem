@@ -62,3 +62,45 @@ Output for APIs:
 Status code
 Data
 
+
+
+
+    /*
+    private void test(RoutingContext context)
+    {
+        JsonObject templateProfile = new JsonObject()
+                .put("credential.profile.name", "YYY")
+                .put("credential.profile.protocol", "SSH")
+                .put("user.name", "yyy")
+                .put("user.password", "Mind@123")
+                .put("community", "")
+                .put("version", "");
+
+        // Loop to generate 50 profiles and insert them asynchronously
+        for (int i = 1; i <= 50; i++) {
+            JsonObject profile = templateProfile.copy()
+                    .put("credential.profile.name", "YYY_" + i);
+
+            // Insert credential asynchronously, don't wait for result
+            queryHandler.insert("credentials",profile);
+        }
+
+        long startProfileId = 2024000000139L;
+
+        for (int i = 0; i <= 50; i++) {
+            long profileId = startProfileId + i;
+
+            List<String> columns = List.of("profile_name", "profile_protocol", "user_name", "user_password", "community", "version");
+
+            queryHandler.get("credentials", columns, new JsonObject().put("profile_id", profileId))
+                    .onComplete(result -> {
+                        if (result.succeeded()) {
+                            System.out.println(result.result().encodePrettily());
+                        }
+                    });
+        }
+        System.out.println("Process completed");
+    }
+
+     */
+

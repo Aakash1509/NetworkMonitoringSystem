@@ -1,36 +1,20 @@
-package org.example.utils;
+package org.example.store;
 
-import io.vertx.core.impl.logging.Logger;
-import io.vertx.core.impl.logging.LoggerFactory;
 import io.vertx.core.json.JsonObject;
-import org.example.routes.Discovery;
 
 import java.io.BufferedReader;
-import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.SocketAddress;
 import java.util.concurrent.TimeUnit;
+import io.vertx.core.impl.logging.Logger;
+import io.vertx.core.impl.logging.LoggerFactory;
 import java.util.regex.Pattern;
 
-public class Config
+public class Util
 {
     private static final Logger logger = LoggerFactory.getLogger(Config.class);
-
-    public static final int POOL_SIZE = 5;
-
-    public static final int DB_PORT = 5432;
-
-    public static final String DB_HOST = "localhost";
-
-    public static final String DB_DATABASE = "project";
-
-    public static final String DB_USER = "postgres";
-
-    public static final String DB_PASSWORD = "test";
-
-    public static final int HTTP_PORT = 8080;
 
     public static boolean validIp(String ip)
     {
@@ -130,14 +114,14 @@ public class Config
         try
         {
             // Extract device information from the JSON object
-            String ip = deviceInfo.getString("discovery.ip");
+            String ip = deviceInfo.getString("ip");
 
-            String port = deviceInfo.getString("discovery.port");
+            int port = deviceInfo.getInteger("port");
 
             String credentials = deviceInfo.getJsonArray("discovery.credential.profiles").encode();
 
             // Spawning a process
-            Process process = new ProcessBuilder("/home/aakash/Plugin/snmp/main", ip, port, credentials)
+            Process process = new ProcessBuilder("/home/aakash/Plugin/snmp/main", ip, String.valueOf(port), credentials)
                     .redirectErrorStream(true).start();
 
             // Wait for the process to complete within 60 seconds
@@ -164,7 +148,7 @@ public class Config
             {
                 JsonObject result = new JsonObject(output);
 
-                deviceInfo.put("credential.profile", result.getLong("credential.profile.id"));
+                deviceInfo.put("credential_profile", result.getLong("credential.profile.id"));
 
                 deviceInfo.put("hostname", result.getString("hostname").trim());
 
@@ -180,5 +164,4 @@ public class Config
             return false;
         }
     }
-
 }

@@ -1,19 +1,18 @@
 package org.example.routes;
 
+import io.vertx.core.Future;
 import io.vertx.core.impl.logging.Logger;
 import io.vertx.core.impl.logging.LoggerFactory;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.Router;
 import io.vertx.ext.web.RoutingContext;
-import io.vertx.ext.web.handler.TimeoutHandler;
-import org.example.database.ProvisionQuery;
 import org.example.database.QueryUtility;
+
+import java.util.List;
 
 public class Provision
 {
-    private final ProvisionQuery provisionQuery = new ProvisionQuery();
-
-    private final QueryUtility queryHandler = new QueryUtility();
+    private final QueryUtility queryHandler = QueryUtility.getInstance();
 
     private static final Logger logger = LoggerFactory.getLogger(Provision.class);
 
@@ -21,27 +20,12 @@ public class Provision
     {
         try
         {
-            provisionRouter.post("/:id")
-                    .handler(TimeoutHandler.create(5000))
-                    .handler(this::provision)
-                    .failureHandler(this::timeout);
+            provisionRouter.post("/:id").handler(this::provision);
+
         }
         catch(Exception exception)
         {
-            logger.error("Error in credential routing", exception);
-        }
-    }
-
-    private void timeout(RoutingContext context)
-    {
-        if (!context.response().ended())
-        {
-            context.response()
-                    .setStatusCode(408)
-                    .end(new JsonObject()
-                            .put("status.code",408)
-                            .put("message","Request Timed Out")
-                            .put("error","The server timed out waiting for the request").encodePrettily());
+            logger.error("Error in provision routing", exception);
         }
     }
 
@@ -62,30 +46,39 @@ public class Provision
         {
             long id = Long.parseLong(discoveryID);
 
-            provisionQuery.insert(id)
-                    .onComplete(result->{
-                        if(result.succeeded())
-                        {
-                            Long objectID = result.result();
+            List<String> columns = List.of("credential_profile","ip","status","hostname");
 
-                            context.response()
-                                    .setStatusCode(201)
-                                    .end(new JsonObject()
-                                            .put("status.code",201)
-                                            .put("message","Device was successfully provisioned")
-                                            .put("data",new JsonObject()
-                                                    .put("object.id", objectID)).encodePrettily());
-                        }
-                        else
+            queryHandler.get("discoveries",columns,new JsonObject().put("discovery_id",id))
+                    .compose(discoveryInfo ->
+                    {
+                        if (discoveryInfo.containsKey("error"))
                         {
-                            context.response()
-                                    .setStatusCode(500)
-                                    .end(new JsonObject()
-                                            .put("status.code",500)
-                                            .put("message","Failed to provision device")
-                                            .put("error",result.cause().getMessage()).encodePrettily());
+                            return Future.failedFuture("This discovery ID was not found in the database");
                         }
-                    });
+                        if (!"Up".equals(discoveryInfo.getString("status")))
+                        {
+                            return Future.failedFuture("Device is down so cannot be provisioned");
+                        }
+                        return queryHandler.insert("objects", new JsonObject()
+                                .put("credential_profile",discoveryInfo.getLong("credential_profile"))
+                                .put("ip",discoveryInfo.getString("ip"))
+                                .put("hostname",discoveryInfo.getString("hostname")));
+
+                    })
+                    .onSuccess(result -> context.response()
+                            .setStatusCode(201)
+                            .end(new JsonObject()
+                                    .put("status.code",201)
+                                    .put("message","Device provisioned successfully")
+                                    .put("data",new JsonObject()
+                                            .put("object.id", result)).encodePrettily()))
+
+                    .onFailure(error -> context.response()
+                            .setStatusCode(400)
+                            .end(new JsonObject()
+                                    .put("status.code",400)
+                                    .put("message","Device cannot be provisioned")
+                                    .put("error",error.getMessage()).encodePrettily()));
         }
         catch (Exception exception)
         {
