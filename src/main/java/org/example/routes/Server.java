@@ -4,7 +4,7 @@ import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Promise;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.Router;
-import org.example.store.Config;
+import org.example.Constants;
 
 public class Server extends AbstractVerticle
 {
@@ -71,7 +71,7 @@ public class Server extends AbstractVerticle
 
                 .requestHandler(router)
 
-                .listen(Config.HTTP_PORT,http->{
+                .listen(Constants.HTTP_PORT, http->{
 
                 if(http.succeeded())
                 {
@@ -79,7 +79,7 @@ public class Server extends AbstractVerticle
                 }
                 else
                 {
-                    promise.fail("Not able to listen on the port: "+Config.HTTP_PORT);
+                    promise.fail("Not able to listen on the port: "+ Constants.HTTP_PORT);
                 }
             });
     }

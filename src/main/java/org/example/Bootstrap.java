@@ -1,8 +1,10 @@
 package org.example;
 
 import io.vertx.core.Vertx;
-import io.vertx.core.impl.logging.Logger;
-import io.vertx.core.impl.logging.LoggerFactory;
+import org.example.poll.Poller;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.example.poll.Scheduler;
 import org.example.routes.Server;
 
 public class Bootstrap
@@ -14,15 +16,21 @@ public class Bootstrap
     public static void main(String[] args)
     {
         vertx.deployVerticle(new Server())
-                .onComplete(result-> {
-                   if(result.succeeded())
-                   {
-                       logger.info("Server verticle deployed successfully");
-                   }
-                   else
-                   {
-                       logger.error("Error in discovery routing", result.cause());
-                   }
+
+                .compose(result -> vertx.deployVerticle(new Scheduler()))
+
+                .compose(result -> vertx.deployVerticle(new Poller()))
+
+                .onComplete(result ->
+                {
+                    if (result.succeeded())
+                    {
+                        logger.info("All verticles deployed successfully: Server, Scheduler, and Poller");
+                    }
+                    else
+                    {
+                        logger.error("Error deploying verticles", result.cause());
+                    }
                 });
     }
 }

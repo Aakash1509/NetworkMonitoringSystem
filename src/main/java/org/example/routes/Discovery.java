@@ -10,7 +10,7 @@ import io.vertx.ext.web.Router;
 import io.vertx.ext.web.RoutingContext;
 import io.vertx.ext.web.handler.BodyHandler;
 import org.example.database.QueryUtility;
-import org.example.store.Util;
+import org.example.utilities.Util;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -36,8 +36,6 @@ public class Discovery implements CrudOperations
             discoveryRouter.delete("/:id").handler(this::delete);
 
             discoveryRouter.post("/:id/run").handler(this::discover);
-
-//            discoveryRouter.post("/test").handler(ctx-> new Discovery().test(ctx));
         }
         catch (Exception exception)
         {
@@ -45,52 +43,7 @@ public class Discovery implements CrudOperations
         }
     }
 
-    /*
-    private void test(RoutingContext context)
-    {
-        System.out.println("hello");
-        JsonObject templateProfile = new JsonObject()
-                .put("profile_name", "YYY")
-                .put("profile_protocol", "SSH")
-                .put("user_name", "yyy")
-                .put("user_password", "Mind@123")
-                .put("community", "")
-                .put("version", "");
 
-        for (int i = 1; i <= 50; i++) {
-            System.out.println("inside insert");
-            JsonObject profile = templateProfile.copy()
-                    .put("profile_name", "YYY_" + i);
-
-            QueryUtility.getInstance().insert("credentials",profile)
-                    .onComplete(result -> {
-                        if (result.succeeded()) {
-                            System.out.println("Generated ID : "+result.result());
-                        }
-                    });
-        }
-
-
-        long startProfileId = 2024000000139L;
-
-        for (int i = 0; i <= 50; i++) {
-            long profileId = startProfileId + i;
-
-            List<String> columns = List.of("profile_name", "profile_protocol", "user_name", "user_password", "community", "version");
-
-            QueryUtility.getInstance().get("credentials", columns, new JsonObject().put("profile_id", profileId))
-                    .onComplete(result -> {
-                        if (result.succeeded()) {
-                            System.out.println(result.result().encodePrettily());
-                        }
-                    });
-        }
-
-
-        System.out.println("Process completed");
-    }
-
-     */
 
     //Creating discovery
     @Override
@@ -541,7 +494,7 @@ public class Discovery implements CrudOperations
 
                         var profiles = deviceInfo.getJsonArray("credential_profiles");
 
-                        List<Future>credentialFutures = new ArrayList<>();
+                        List<Future<JsonObject>>credentialFutures = new ArrayList<>();
 
                         if(profiles.isEmpty())
                         {
@@ -565,7 +518,7 @@ public class Discovery implements CrudOperations
                             credentialFutures.add(credentialFuture);
                         }
 
-                        return CompositeFuture.join(credentialFutures)
+                        return Future.join(credentialFutures)
                                 .map(compositeFuture ->
                                 {
                                     var profileData = new JsonArray();

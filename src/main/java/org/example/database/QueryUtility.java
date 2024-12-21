@@ -11,7 +11,7 @@ import io.vertx.sqlclient.Row;
 import io.vertx.sqlclient.RowSet;
 import io.vertx.sqlclient.Tuple;
 import org.example.Bootstrap;
-import org.example.store.Config;
+import org.example.Constants;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -40,15 +40,15 @@ public class QueryUtility
     {
         // Database connection options
         PgConnectOptions connectOptions = new PgConnectOptions()
-                .setPort(Config.DB_PORT)
-                .setHost(Config.DB_HOST)
-                .setDatabase(Config.DB_DATABASE)
-                .setUser(Config.DB_USER)
-                .setPassword(Config.DB_PASSWORD);
+                .setPort(Constants.DB_PORT)
+                .setHost(Constants.DB_HOST)
+                .setDatabase(Constants.DB_DATABASE)
+                .setUser(Constants.DB_USER)
+                .setPassword(Constants.DB_PASSWORD);
 
         // Pool options
         PoolOptions poolOptions = new PoolOptions()
-                .setMaxSize(Config.POOL_SIZE); // Maximum connections in the pool
+                .setMaxSize(Constants.POOL_SIZE); // Maximum connections in the pool
 
         // Create client
         client = PgPool.pool(Bootstrap.vertx, connectOptions, poolOptions);
@@ -198,7 +198,9 @@ public class QueryUtility
                     {
                         RowSet<Row> rows = execute.result();
 
-                        if (rows.iterator().hasNext())
+                        int count = rows.rowCount();
+
+                        if(count==1)
                         {
                             Row row = rows.iterator().next();
 
@@ -214,6 +216,28 @@ public class QueryUtility
                                 response.put(fieldName, fieldValue);
                             }
                             promise.complete(response);
+                        }
+                        else if (count>1)
+                        {
+                            JsonArray rowsArray = new JsonArray();
+
+                            for (Row row : rows)
+                            {
+                                JsonObject rowObject = new JsonObject();
+
+                                for (int i = 0; i < row.size(); i++)
+                                {
+                                    var fieldName = row.getColumnName(i);
+
+                                    var fieldValue = row.getValue(i);
+
+                                    rowObject.put(fieldName, fieldValue);
+                                }
+                                rowsArray.add(rowObject);
+                            }
+
+                            promise.complete(new JsonObject()
+                                    .put("data", rowsArray));
                         }
                         else
                         {

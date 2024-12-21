@@ -1,4 +1,4 @@
-package org.example.store;
+package org.example.utilities;
 
 import io.vertx.core.json.JsonObject;
 
@@ -10,11 +10,13 @@ import java.net.SocketAddress;
 import java.util.concurrent.TimeUnit;
 import io.vertx.core.impl.logging.Logger;
 import io.vertx.core.impl.logging.LoggerFactory;
+import org.example.Constants;
+
 import java.util.regex.Pattern;
 
 public class Util
 {
-    private static final Logger logger = LoggerFactory.getLogger(Config.class);
+    private static final Logger logger = LoggerFactory.getLogger(Constants.class);
 
     public static boolean validIp(String ip)
     {
