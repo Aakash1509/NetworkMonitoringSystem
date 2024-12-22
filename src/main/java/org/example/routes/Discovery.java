@@ -1,14 +1,12 @@
 package org.example.routes;
 
-import io.vertx.core.CompositeFuture;
 import io.vertx.core.Future;
-import io.vertx.core.impl.logging.Logger;
-import io.vertx.core.impl.logging.LoggerFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.Router;
 import io.vertx.ext.web.RoutingContext;
-import io.vertx.ext.web.handler.BodyHandler;
 import org.example.database.QueryUtility;
 import org.example.utilities.Util;
 
@@ -25,11 +23,11 @@ public class Discovery implements CrudOperations
     {
         try
         {
-            discoveryRouter.post("/create").handler(BodyHandler.create()).handler(this::create);
+            discoveryRouter.post("/create").handler(this::create);
 
-            discoveryRouter.put("/:id").handler(BodyHandler.create()).handler(this::update);
+            discoveryRouter.put("/:id").handler(this::update);
 
-            discoveryRouter.get("/getAll").handler(this::getAll);
+            discoveryRouter.get("/").handler(this::getAll);
 
             discoveryRouter.get("/:id").handler(this::get);
 
@@ -42,8 +40,6 @@ public class Discovery implements CrudOperations
             logger.error("Error in discovery routing", exception);
         }
     }
-
-
 
     //Creating discovery
     @Override
@@ -92,12 +88,10 @@ public class Discovery implements CrudOperations
                 return;
             }
 
-            List<String> columns = List.of("discovery_id");
-
-            QueryUtility.getInstance().get("discoveries", columns, new JsonObject().put("name", name))
+            QueryUtility.getInstance().get("discoveries", List.of("discovery_id"), new JsonObject().put("user_name", name))
                     .compose(result ->
                     {
-                        if (!result.containsKey("error"))
+                        if (result.containsKey("error"))
                         {
                             // If discovery name already exists, return a failed future
                             return Future.failedFuture("Discovery name should be unique");
@@ -117,11 +111,9 @@ public class Discovery implements CrudOperations
                     {
                         if(result.succeeded())
                         {
-                            Long discoveryID = result.result();
-
                             context.response().setStatusCode(201).end(new JsonObject()
                                             .put("status.code",201).put("message","Discovery created successfully")
-                                            .put("data",new JsonObject().put("discovery.id", discoveryID)).encodePrettily());
+                                            .put("data",new JsonObject().put("discovery.id", result.result())).encodePrettily());
                         }
                         else
                         {
@@ -193,28 +185,14 @@ public class Discovery implements CrudOperations
                 return;
             }
 
-            long id = Long.parseLong(discoveryID);
+            var id = Long.parseLong(discoveryID);
 
-            List<String> columns = List.of("discovery_id");
-
-            QueryUtility.getInstance().get("discoveries", columns, new JsonObject().put("name", name))
-                    .compose(result ->
-                    {
-                        if (!result.containsKey("error"))
-                        {
-                            // If discovery name already exists, return a failed future
-                            return Future.failedFuture("Discovery name should be unique");
-                        }
-                        else
-                        {
-                            // If name is unique, insert
-                            return QueryUtility.getInstance().update("discoveries",new JsonObject()
+            QueryUtility.getInstance().update("discoveries",new JsonObject()
                                     .put("name",name)
                                     .put("ip",ip)
                                     .put("port",port)
-                                    .put("credential_profiles",credential_profiles),new JsonObject().put("discovery_id",id));
-                        }
-                    })
+                                    .put("credential_profiles",credential_profiles),new JsonObject().put("discovery_id",id))
+
                     .onComplete(result->
                     {
                         if(result.succeeded())
@@ -227,7 +205,7 @@ public class Discovery implements CrudOperations
                         }
                         else
                         {
-                            if (result.cause().getMessage().contains("Information not found"))
+                            if (result.cause().getMessage().contains("No matching rows found"))
                             {
                                 context.response()
                                         .setStatusCode(404)
@@ -279,7 +257,7 @@ public class Discovery implements CrudOperations
         }
         try
         {
-            long id = Long.parseLong(discoveryID);
+            var id = Long.parseLong(discoveryID);
 
             QueryUtility.getInstance().delete("discoveries","discovery_id",id)
                     .onComplete(result->
@@ -342,9 +320,9 @@ public class Discovery implements CrudOperations
         }
         try
         {
-            long id = Long.parseLong(discoveryID);
+            var id = Long.parseLong(discoveryID);
 
-            List<String> columns = List.of("credential_profile", "name", "ip","port","credential_profiles","status","hostname");
+            var columns = List.of("credential_profile", "name", "ip","port","credential_profiles","status","hostname");
 
             QueryUtility.getInstance().get("discoveries",columns,new JsonObject().put("discovery_id",id))
                     .onComplete(result->
@@ -462,9 +440,9 @@ public class Discovery implements CrudOperations
         }
         try
         {
-            long id = Long.parseLong(discoveryID);
+            var id = Long.parseLong(discoveryID);
 
-            List<String> columns = List.of("ip","port","credential_profiles");
+            var columns = List.of("ip","port","credential_profiles");
 
                 //I will check whether this discovery ID is present in database or not
                 QueryUtility.getInstance().get("discoveries",columns,new JsonObject().put("discovery_id",id))
@@ -509,10 +487,10 @@ public class Discovery implements CrudOperations
                             Future<JsonObject> credentialFuture = QueryUtility.getInstance().get("credentials", fields, new JsonObject().put("profile_id",profileID))
 
                                     .onSuccess(result -> {
-                                        logger.info("Credential fetch succeeded for profile ID " + profileID);
+                                        logger.info("Credential fetch succeeded for profile ID {}", profileID);
                                     })
                                     .onFailure(err -> {
-                                        logger.error("Credential for profile ID " + profileID + " not found: " + err.getMessage());
+                                        logger.error("Credential for profile ID {} not found: {}", profileID, err.getMessage());
                                     });
 
                             credentialFutures.add(credentialFuture);

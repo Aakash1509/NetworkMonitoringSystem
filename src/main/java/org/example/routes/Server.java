@@ -4,6 +4,7 @@ import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Promise;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.Router;
+import io.vertx.ext.web.handler.BodyHandler;
 import org.example.Constants;
 
 public class Server extends AbstractVerticle
@@ -15,14 +16,14 @@ public class Server extends AbstractVerticle
         //A)Credential Module : Credential Router for handling Credential routes
         var credentialRouter = Router.router(vertx);
 
-        router.route("/api/v1/credentials/*").subRouter(credentialRouter);
+        router.route("/api/v1/credentials/*").handler(BodyHandler.create()).subRouter(credentialRouter);
 
         new Credentials().route(credentialRouter);
 
         //B)Discovery Module : Discovery Router for handling Discovery routes
         var discoveryRouter = Router.router(vertx);
 
-        router.route("/api/v1/discovery/*").subRouter(discoveryRouter);
+        router.route("/api/v1/discovery/*").handler(BodyHandler.create()).subRouter(discoveryRouter);
 
         new Discovery().route(discoveryRouter); //Instead of var discoveryObject = new Discovery();discoveryObject.route(discoveryRouter)
 

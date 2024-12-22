@@ -21,12 +21,12 @@ public class Poller extends AbstractVerticle //Logic will be here only to update
             List<String> columns = List.of("profile_protocol","user_name","user_password","community","version");
 
             //Fetching device details through credential profile ID as that details will also be needed
-            QueryUtility.getInstance().get("credentials",columns,new JsonObject().put("profile_id",pollingData.getLong("credential_profile")))
+            QueryUtility.getInstance().get("credentials",columns,new JsonObject().put("profile_id",pollingData.getLong("credential.profile")))
                     .onSuccess(deviceInfo->
                     {
-                        pollingData.put("profile_protocol",deviceInfo.getString("profile_protocol"))
-                                .put("user_name",deviceInfo.getString("user_name"))
-                                .put("user_password",deviceInfo.getString("user_password"))
+                        pollingData.put("profile.protocol",deviceInfo.getString("profile_protocol"))
+                                .put("user.name",deviceInfo.getString("user_name"))
+                                .put("user.password",deviceInfo.getString("user_password"))
                                 .put("community",deviceInfo.getString("community"))
                                 .put("version",deviceInfo.getString("version"));
 
@@ -35,7 +35,7 @@ public class Poller extends AbstractVerticle //Logic will be here only to update
                     .onFailure(error ->
                     {
                         logger.error("Failed to fetch device details for profile_id: {}. Cause: {}",
-                                pollingData.getLong("credential_profile"), error.getMessage());
+                                pollingData.getLong("credential.profile"), error.getMessage());
                     });
         });
     }

@@ -1,7 +1,7 @@
 package org.example.routes;
 import io.vertx.core.Future;
-import io.vertx.core.impl.logging.Logger;
-import io.vertx.core.impl.logging.LoggerFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.Router;
 import io.vertx.ext.web.RoutingContext;
@@ -55,11 +55,12 @@ public class Provision
         }
         try
         {
-            long id = Long.parseLong(discoveryID);
+            var id = Long.parseLong(discoveryID);
 
-            List<String> columns = List.of("credential_profile","ip","status","hostname");
+            var columns = List.of("credential_profile","ip","status","hostname");
 
-            QueryUtility.getInstance().get("discoveries",columns,new JsonObject().put("discovery_id",id))
+            //First I will check do discoveryID exists or not
+            QueryUtility.getInstance().get("discoveries", columns, new JsonObject().put("discovery_id", id))
                     .compose(discoveryInfo ->
                     {
                         if (discoveryInfo.containsKey("error"))
@@ -70,11 +71,27 @@ public class Provision
                         {
                             return Future.failedFuture("Device is down so cannot be provisioned");
                         }
-                        return QueryUtility.getInstance().insert("objects", new JsonObject()
-                                .put("credential_profile",discoveryInfo.getLong("credential_profile"))
-                                .put("ip",discoveryInfo.getString("ip"))
-                                .put("hostname",discoveryInfo.getString("hostname")));
 
+                        // Secondly I will check if device is already provisioned or not
+                        return QueryUtility.getInstance()
+                                .get("objects", List.of("ip"), new JsonObject().put("ip", discoveryInfo.getString("ip")))
+
+                                .compose(existingObject ->
+                                {
+                                    if (!existingObject.containsKey("error"))
+                                    {
+                                        return Future.failedFuture("Device is already provisioned with this IP Address");
+                                    }
+                                    return Future.succeededFuture(discoveryInfo);
+                                });
+                    })
+                    .compose(discoveryInfo ->
+                    {
+                        // Proceed to insert the device into the 'objects' table
+                        return QueryUtility.getInstance().insert("objects", new JsonObject()
+                                .put("credential_profile", discoveryInfo.getLong("credential_profile"))
+                                .put("ip", discoveryInfo.getString("ip"))
+                                .put("hostname", discoveryInfo.getString("hostname")));
                     })
                     .compose(objectId ->
                     {

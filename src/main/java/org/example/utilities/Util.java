@@ -8,8 +8,8 @@ import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.SocketAddress;
 import java.util.concurrent.TimeUnit;
-import io.vertx.core.impl.logging.Logger;
-import io.vertx.core.impl.logging.LoggerFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.example.Constants;
 
 import java.util.regex.Pattern;
@@ -123,7 +123,7 @@ public class Util
             String credentials = deviceInfo.getJsonArray("discovery.credential.profiles").encode();
 
             // Spawning a process
-            Process process = new ProcessBuilder("/home/aakash/Plugin/snmp/main", ip, String.valueOf(port), credentials)
+            Process process = new ProcessBuilder("/home/aakash/Plugin/connection/main", ip, String.valueOf(port), credentials)
                     .redirectErrorStream(true).start();
 
             // Wait for the process to complete within 60 seconds

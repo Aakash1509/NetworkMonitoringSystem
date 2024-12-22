@@ -304,12 +304,12 @@ public class QueryUtility
                         }
                         else
                         {
-                            promise.complete(false); // No rows updated
+                            promise.fail("No matching rows found"); // No rows updated
                         }
                     }
                     else
                     {
-                        promise.fail(execute.cause().getMessage());
+                        promise.fail(execute.cause());
                     }
                 });
 

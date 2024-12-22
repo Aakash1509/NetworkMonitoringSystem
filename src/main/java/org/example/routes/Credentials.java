@@ -1,15 +1,15 @@
 package org.example.routes;
 
 import io.vertx.core.Future;
-import io.vertx.core.impl.logging.Logger;
-import io.vertx.core.impl.logging.LoggerFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.Router;
 import io.vertx.ext.web.RoutingContext;
-import io.vertx.ext.web.handler.BodyHandler;
 import org.example.database.QueryUtility;
 
 import java.util.List;
+import java.util.Objects;
 
 public class Credentials implements CrudOperations
 {
@@ -19,11 +19,11 @@ public class Credentials implements CrudOperations
     {
         try
         {
-            credentialRouter.post("/create").handler(BodyHandler.create()).handler(this::create);
+            credentialRouter.post("/create").handler(this::create);
 
-            credentialRouter.put("/:id").handler(BodyHandler.create()).handler(this::update);
+            credentialRouter.put("/:id").handler(this::update);
 
-            credentialRouter.get("/getAll").handler(this::getAll);
+            credentialRouter.get("/").handler(this::getAll);
 
             credentialRouter.get("/:id").handler(this::get);
 
@@ -58,12 +58,12 @@ public class Credentials implements CrudOperations
                 return;
             }
 
-            List<String> columns = List.of("profile_id");
+            var columns = List.of("profile_id");
 
-            QueryUtility.getInstance().get("credentials", columns, new JsonObject().put("name", name))
+            QueryUtility.getInstance().get("credentials", columns, new JsonObject().put("user_name", name))
                     .compose(result ->
                     {
-                        if (!result.containsKey("error"))
+                        if (result.containsKey("error"))
                         {
                             // If discovery name already exists, return a failed future
                             return Future.failedFuture("Credential profile name should be unique");
@@ -86,7 +86,7 @@ public class Credentials implements CrudOperations
                         {
                             var profileId = result.result();
 
-                            JsonObject response = new JsonObject()
+                            var response = new JsonObject()
                                     .put("credential.profile.id", profileId);
                             
                             context.response()
@@ -142,61 +142,47 @@ public class Credentials implements CrudOperations
         }
         try
         {
-            long id = Long.parseLong(credentialID);
+            var id = Long.parseLong(credentialID);
 
-            List<String> columns = List.of("profile_id");
-
-            QueryUtility.getInstance().get("credentials", columns, new JsonObject().put("name", name))
-                    .compose(result ->
+            QueryUtility.getInstance().update("credentials",
+                                                    new JsonObject()
+                                                            .put("profile_name", name)
+                                                            .put("profile_protocol", protocol)
+                                                            .put("user_name", requestBody.getString("user.name"))
+                                                            .put("user_password", requestBody.getString("user.password"))
+                                                            .put("community", requestBody.getString("community"))
+                                                            .put("version", requestBody.getString("version")),
+                                                    new JsonObject().put("profile_id", id))
+                    .onComplete(result->
                     {
-                        if (!result.containsKey("error"))
+                        if(result.succeeded())
                         {
-                            // If discovery name already exists, return a failed future
-                            return Future.failedFuture("Credential profile name should be unique");
+                            context.response()
+                                    .setStatusCode(200)
+                                    .end(new JsonObject()
+                                            .put("status.code",200)
+                                            .put("message","Credential profile updated successfully").encodePrettily());
                         }
                         else
                         {
-                            // If name is unique, update
-                            return QueryUtility.getInstance().update("credentials",new JsonObject()
-                                    .put("profile_name",name)
-                                    .put("profile_protocol",protocol)
-                                    .put("user_name",requestBody.getString("user.name"))
-                                    .put("user_password",requestBody.getString("user.password"))
-                                    .put("community",requestBody.getString("community"))
-                                    .put("version",requestBody.getString("version")),new JsonObject().put("profile_id",id));
+                            if (result.cause().getMessage().contains("No matching rows found"))
+                            {
+                                context.response()
+                                        .setStatusCode(404)
+                                        .end(new JsonObject()
+                                                .put("status.code",404)
+                                                .put("message","Credential profile not found of this ID").encodePrettily());
+                            }
+                            else
+                            {
+                                context.response()
+                                        .setStatusCode(500)
+                                        .end(new JsonObject()
+                                                .put("status.code",500)
+                                                .put("message","Database error while updating credential profile")
+                                                .put("error",result.cause().getMessage()).encodePrettily());
+                            }
                         }
-                    })
-
-                    .onComplete(result->
-                    {
-                       if(result.succeeded())
-                       {
-                           context.response()
-                                   .setStatusCode(200)
-                                   .end(new JsonObject()
-                                           .put("status.code",200)
-                                           .put("message","Credential profile updated successfully").encodePrettily());
-                       }
-                       else
-                       {
-                           if (result.cause().getMessage().contains("Information not found"))
-                           {
-                               context.response()
-                                       .setStatusCode(404)
-                                       .end(new JsonObject()
-                                               .put("status.code",404)
-                                               .put("message","Credential profile not found of this ID").encodePrettily());
-                           }
-                           else
-                           {
-                               context.response()
-                                       .setStatusCode(500)
-                                       .end(new JsonObject()
-                                               .put("status.code",500)
-                                               .put("message","Database error while updating credential profile")
-                                               .put("error",result.cause().getMessage()).encodePrettily());
-                           }
-                       }
                     });
         }
         catch (Exception exception)
@@ -227,7 +213,7 @@ public class Credentials implements CrudOperations
         }
         try
         {
-            long id = Long.parseLong(credentialID);
+            var id = Long.parseLong(credentialID);
 
             QueryUtility.getInstance().delete("credentials","profile_id",id)
                     .onComplete(result ->
@@ -291,9 +277,9 @@ public class Credentials implements CrudOperations
         }
         try
         {
-            long id = Long.parseLong(credentialID);
+            var id = Long.parseLong(credentialID);
 
-            List<String> columns = List.of("profile_name", "profile_protocol", "user_name","user_password","community","version");
+            var columns = List.of("profile_name", "profile_protocol", "user_name","user_password","community","version");
 
             QueryUtility.getInstance().get("credentials",columns,new JsonObject().put("profile_id",id))
                     .onComplete(result->
