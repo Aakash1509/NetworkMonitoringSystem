@@ -10,9 +10,13 @@ import org.slf4j.LoggerFactory;
 import io.vertx.core.json.JsonObject;
 import org.example.database.QueryUtility;
 
-import java.util.HashMap;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class Scheduler extends AbstractVerticle
 {
@@ -20,21 +24,45 @@ public class Scheduler extends AbstractVerticle
 
     private static final int PERIODIC_INTERVAL = 5000;
 
-    private final Map<Long,JsonObject> pollDevices = new HashMap<>(); //Will contain provisioned devices
+    private final Map<Long,JsonObject> pollDevices = new ConcurrentHashMap<>(); //Will contain provisioned devices
 
     public void start()
     {
-        getDevices()
-                .onSuccess(v->
-                {
-                    logger.info("Provisioned devices in database fetched successfully.");
+        try
+        {
+            getDevices()
+                    .onSuccess(v->
+                    {
+                        logger.info("Provisioned devices in database fetched successfully.");
 
-                    vertx.setPeriodic(PERIODIC_INTERVAL,id-> checkAndPreparePolling());
-                })
-                .onFailure(error->
-                {
-                    logger.info("Failed to fetch provisioned devices : {}",error.getMessage());
-                });
+                        vertx.setPeriodic(PERIODIC_INTERVAL,id-> checkAndPreparePolling());
+
+                        vertx.eventBus().<JsonObject>localConsumer(Constants.OBJECT_PROVISION,object->{
+                            var objectID = object.body().getLong("object_id");
+
+                            fetchMetricData(objectID)
+                                    .onSuccess(metrics ->
+                                    {
+                                        var deviceMetrics = new JsonObject()
+                                                .put("device", object.body())
+                                                .put("metrics", metrics);
+
+                                        pollDevices.put(objectID, deviceMetrics);
+                                    })
+                                    .onFailure(err -> logger.error("Failed to fetch {}: {}", objectID, err.getMessage()));
+                        });
+                    })
+                    .onFailure(error->
+                    {
+                        logger.info("Failed to fetch provisioned devices : {}",error.getMessage());
+
+                        vertx.setPeriodic(PERIODIC_INTERVAL,id-> checkAndPreparePolling());
+                    });
+        }
+        catch (Exception exception)
+        {
+            logger.error(exception.getMessage(),exception);
+        }
     }
 
     //To fetch provisioned devices present in database
@@ -108,6 +136,12 @@ public class Scheduler extends AbstractVerticle
 
     private void checkAndPreparePolling()
     {
+        if(pollDevices.isEmpty())
+        {
+            logger.info("No provisioned devices currently");
+
+            return;
+        }
         for (Map.Entry<Long, JsonObject> entry : pollDevices.entrySet())
         {
             var deviceMetrics = entry.getValue();
@@ -127,21 +161,52 @@ public class Scheduler extends AbstractVerticle
 
     private void preparePolling(JsonObject objectData, JsonObject metricData)
     {
-        var pollTime = metricData.getInteger("metric_poll_time") * 1000L; //To convert into millisecond
-
-        var lastPolled = metricData.getLong("last_polled");
-
-        var currentTime = System.currentTimeMillis();
-
-        if(lastPolled == null || currentTime - lastPolled >= pollTime)
+        try
         {
-            vertx.eventBus().send(Constants.OBJECT_POLL,new JsonObject()
-                                                        .put("object.id",objectData.getLong("object_id"))
-                                                        .put("credential.profile",objectData.getLong("credential_profile"))
-                                                        .put("ip",objectData.getString("ip"))
-                                                        .put("metric.group.name",metricData.getString("metric_group_name")));
+            var pollTime = metricData.getInteger("metric_poll_time") * 1000L; // To convert to milliseconds
+            var lastPolledStr = metricData.getString("last_polled");  // Fetch as String
 
-            logger.info("Polling triggered for {} at {}", objectData.getString("hostname"), objectData.getString("ip"));
+            LocalDateTime lastPolled = null;
+            if (lastPolledStr != null) {
+                // Use correct pattern to match timestamp format: 2024-12-22T23:52:30.729
+                DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS");
+                lastPolled = LocalDateTime.parse(lastPolledStr, formatter);
+            }
+
+            var currentTime = System.currentTimeMillis();
+
+            if (lastPolled == null || currentTime - lastPolled.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli() >= pollTime)
+            {
+                vertx.eventBus().send(Constants.OBJECT_POLL, new JsonObject()
+                        .put("credential.profile", objectData.getLong("credential_profile"))
+                        .put("ip", objectData.getString("ip"))
+                        .put("metric.group.name", metricData.getString("metric_group_name")));
+
+                logger.info("Polling triggered for {} at {}", objectData.getString("hostname"), objectData.getString("ip"));
+
+                // Update the last polled time in the hashmap (still using String for convenience)
+                metricData.put("last_polled", LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS")));
+
+                // Update last polled time in the database as LocalDateTime (not a String)
+                LocalDateTime currentLocalDateTime = LocalDateTime.now();
+
+                QueryUtility.getInstance().update("metrics", new JsonObject()
+                                        .put("last_polled", currentLocalDateTime),  // Update with LocalDateTime
+                                new JsonObject().put("metric_object", objectData.getLong("object_id")))
+                        .onSuccess(updated -> {
+                            if (updated) {
+                                logger.info("Last polled time updated for object ID : {}", objectData.getLong("object_id"));
+                            }
+                        })
+                        .onFailure(error -> {
+                            logger.error("Failed to update last polled time for object ID : {} - {}", objectData.getLong("object_id"), error.getMessage());
+                        });
+            }
         }
+        catch (Exception exception)
+        {
+            logger.error(exception.getMessage(),exception);
+        }
+
     }
 }

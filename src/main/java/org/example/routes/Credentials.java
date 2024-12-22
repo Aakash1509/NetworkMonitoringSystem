@@ -63,7 +63,7 @@ public class Credentials implements CrudOperations
             QueryUtility.getInstance().get("credentials", columns, new JsonObject().put("user_name", name))
                     .compose(result ->
                     {
-                        if (result.containsKey("error"))
+                        if (!result.containsKey("error"))
                         {
                             // If discovery name already exists, return a failed future
                             return Future.failedFuture("Credential profile name should be unique");

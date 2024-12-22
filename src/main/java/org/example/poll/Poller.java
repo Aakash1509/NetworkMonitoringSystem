@@ -1,6 +1,7 @@
 package org.example.poll;
 import io.vertx.core.AbstractVerticle;
 import io.vertx.core.json.JsonObject;
+import org.example.Bootstrap;
 import org.example.Constants;
 import org.example.database.QueryUtility;
 import org.slf4j.Logger;
@@ -8,17 +9,17 @@ import org.slf4j.LoggerFactory;
 
 import java.util.List;
 
-public class Poller extends AbstractVerticle //Logic will be here only to update the last_polled time of the device
+public class Poller extends AbstractVerticle
 {
     private static final Logger logger = LoggerFactory.getLogger(Poller.class);
 
     public void start()
     {
-        vertx.eventBus().<JsonObject>consumer(Constants.OBJECT_POLL, message ->
+        Bootstrap.vertx.eventBus().<JsonObject>consumer(Constants.OBJECT_POLL, message ->
         {
             var pollingData = message.body();
 
-            List<String> columns = List.of("profile_protocol","user_name","user_password","community","version");
+            var columns = List.of("profile_protocol","user_name","user_password","community","version");
 
             //Fetching device details through credential profile ID as that details will also be needed
             QueryUtility.getInstance().get("credentials",columns,new JsonObject().put("profile_id",pollingData.getLong("credential.profile")))
@@ -29,6 +30,8 @@ public class Poller extends AbstractVerticle //Logic will be here only to update
                                 .put("user.password",deviceInfo.getString("user_password"))
                                 .put("community",deviceInfo.getString("community"))
                                 .put("version",deviceInfo.getString("version"));
+
+                        pollingData.remove("credential.profile");
 
                         startPoll(pollingData);
                     })
@@ -42,6 +45,49 @@ public class Poller extends AbstractVerticle //Logic will be here only to update
 
     private void startPoll(JsonObject pollingData)
     {
-        logger.info(pollingData.encodePrettily());
+        logger.info("Started polling of ip: {}",pollingData.getString("ip"));
+
+        Bootstrap.vertx.executeBlocking(promise ->
+        {
+            try
+            {
+                // Start the process
+                Process process = new ProcessBuilder("/home/aakash/Plugin/polling/polling", pollingData.encode())
+                        .redirectErrorStream(true).start();
+
+                // Capture output from the Go executable
+                var output = new String(process.getInputStream().readAllBytes());
+
+                var error = new String(process.getErrorStream().readAllBytes());
+
+                process.waitFor();
+
+                if (!error.isEmpty())
+                {
+                    logger.error("Error from Go executable: {}", error);
+                }
+                else
+                {
+                    logger.info("Metrics collected: {}", output);
+                }
+                promise.complete(output);
+            }
+            catch (Exception exception)
+            {
+                logger.error("Failed to execute Go executable", exception);
+
+                promise.fail(exception);
+            }
+        }, false,res ->
+        {
+            if (res.succeeded())
+            {
+                logger.info("Metrics fetched successfully for ip: {}", pollingData.getString("ip"));
+            }
+            else
+            {
+                logger.error("Failed to fetch metrics for ip: {}", pollingData.getString("ip"));
+            }
+        });
     }
 }

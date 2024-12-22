@@ -6,17 +6,15 @@ import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.net.InetSocketAddress;
 import java.net.Socket;
-import java.net.SocketAddress;
 import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.example.Constants;
 
 import java.util.regex.Pattern;
 
 public class Util
 {
-    private static final Logger logger = LoggerFactory.getLogger(Constants.class);
+    private static final Logger logger = LoggerFactory.getLogger(Util.class);
 
     public static boolean validIp(String ip)
     {
@@ -45,12 +43,12 @@ public class Util
 
             var reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
 
-            String line;
+            String  line;
 
-            boolean down = false;
+            var down = false;
 
             //Due to network latency if 5 packets are not send, then waitFor
-            boolean status = process.waitFor(5, TimeUnit.SECONDS); //Will return boolean , while exitvalue returns 0 or other value
+            var status = process.waitFor(5, TimeUnit.SECONDS); //Will return boolean , while exitvalue returns 0 or other value
 
             if(!status)
             {
@@ -83,9 +81,9 @@ public class Util
 
     public static boolean isPortOpen(String ip,Integer port)
     {
-        Socket socket = new Socket();
+        var socket = new Socket();
 
-        SocketAddress address = new InetSocketAddress(ip,port);
+        var address = new InetSocketAddress(ip,port);
 
         try
         {
@@ -105,7 +103,6 @@ public class Util
             }
             catch (Exception exception)
             {
-//                e.printStackTrace();
                 logger.error(exception.getMessage());
             }
         }
@@ -116,18 +113,18 @@ public class Util
         try
         {
             // Extract device information from the JSON object
-            String ip = deviceInfo.getString("ip");
+            var ip = deviceInfo.getString("ip");
 
-            int port = deviceInfo.getInteger("port");
+            var port = deviceInfo.getInteger("port");
 
-            String credentials = deviceInfo.getJsonArray("discovery.credential.profiles").encode();
+            var credentials = deviceInfo.getJsonArray("discovery.credential.profiles").encode();
 
             // Spawning a process
             Process process = new ProcessBuilder("/home/aakash/Plugin/connection/main", ip, String.valueOf(port), credentials)
                     .redirectErrorStream(true).start();
 
             // Wait for the process to complete within 60 seconds
-            boolean status = process.waitFor(60, TimeUnit.SECONDS);
+            var status = process.waitFor(60, TimeUnit.SECONDS); //(boolean)
 
             if (!status)
             {
@@ -143,7 +140,7 @@ public class Util
 
             String output = reader.readLine();
 
-            logger.info("Output from Go executable: " + output);
+            logger.info("Output from Go executable: {}", output);
 
             // Parse the output and update the deviceInfo JSON object
             if (output != null && !output.isEmpty() && !output.contains("Failed"))
@@ -161,7 +158,7 @@ public class Util
         }
         catch (Exception exception)
         {
-            logger.error("Error during connection making: " + exception.getMessage());
+            logger.error("Error during connection making: {}", exception.getMessage());
 
             return false;
         }

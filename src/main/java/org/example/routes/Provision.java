@@ -71,7 +71,6 @@ public class Provision
                         {
                             return Future.failedFuture("Device is down so cannot be provisioned");
                         }
-
                         // Secondly I will check if device is already provisioned or not
                         return QueryUtility.getInstance()
                                 .get("objects", List.of("ip"), new JsonObject().put("ip", discoveryInfo.getString("ip")))
@@ -91,25 +90,36 @@ public class Provision
                         return QueryUtility.getInstance().insert("objects", new JsonObject()
                                 .put("credential_profile", discoveryInfo.getLong("credential_profile"))
                                 .put("ip", discoveryInfo.getString("ip"))
-                                .put("hostname", discoveryInfo.getString("hostname")));
+                                .put("hostname", discoveryInfo.getString("hostname")))
+                                .map(insertedId ->
+                                {
+                                    discoveryInfo.put("object_id", insertedId);
+
+                                    return discoveryInfo; // Return discoveryInfo for next steps
+                                });
                     })
-                    .compose(objectId ->
+                    .compose(discoveryInfo ->
                     {
-                        // Inserting metrics for the provisioned object
+                        // Attaching metrics for the provisioned object
                         List<Future<Long>> metricFutures = new ArrayList<>();
 
-                        metric.forEach((key, value) -> {
+                        metric.forEach((key, value) ->
+                        {
                             metricFutures.add(QueryUtility.getInstance().insert("metrics", new JsonObject()
                                     .put("metric_group_name", key)
                                     .put("metric_poll_time", value)
-                                    .put("metric_object", objectId)));
+                                    .put("metric_object", discoveryInfo.getLong("object_id"))));
                         });
 
-                        return Future.all(metricFutures).map(objectId);
+                        return Future.all(metricFutures).map(discoveryInfo);
                     })
                     .onSuccess(result ->
                     {
-                        vertx.eventBus().send(Constants.OBJECT_PROVISION,result);
+                        vertx.eventBus().send(Constants.OBJECT_PROVISION,new JsonObject()
+                                .put("object_id",result.getLong("object_id"))
+                                .put("credential_profile", result.getLong("credential_profile"))
+                                .put("ip",result.getString("ip"))
+                                .put("hostname",result.getString("hostname")));
 
                         context.response()
                                 .setStatusCode(201)
@@ -117,7 +127,7 @@ public class Provision
                                         .put("status.code",201)
                                         .put("message","Device provisioned successfully")
                                         .put("data",new JsonObject()
-                                                .put("object.id", result)).encodePrettily());
+                                                .put("object.id", result.getLong("object_id"))).encodePrettily());
                     })
                     .onFailure(error -> context.response()
                             .setStatusCode(400)

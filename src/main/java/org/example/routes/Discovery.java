@@ -88,10 +88,10 @@ public class Discovery implements CrudOperations
                 return;
             }
 
-            QueryUtility.getInstance().get("discoveries", List.of("discovery_id"), new JsonObject().put("user_name", name))
+            QueryUtility.getInstance().get("discoveries", List.of("discovery_id"), new JsonObject().put("name", name))
                     .compose(result ->
                     {
-                        if (result.containsKey("error"))
+                        if (!result.containsKey("error"))
                         {
                             // If discovery name already exists, return a failed future
                             return Future.failedFuture("Discovery name should be unique");
