@@ -56,13 +56,13 @@ public class QueryUtility
 
     public Future<Long> insert(String tableName, JsonObject data)
     {
-        Promise<Long> promise = Promise.promise();
+        var promise = Promise.<Long>promise();
 
         var columns = new StringBuilder();
 
         var placeholders = new StringBuilder();
 
-        List<Object> values = new ArrayList<>();
+        var values = new ArrayList<>();
 
         data.forEach(entry ->
         {
@@ -104,7 +104,7 @@ public class QueryUtility
 
     public Future<Void> delete(String tableName, String column, Long id)
     {
-        Promise<Void> promise = Promise.promise();
+        var promise = Promise.<Void>promise();
 
         client.preparedQuery("DELETE FROM "+ tableName + " WHERE " + column + " = $1")
                 .execute(Tuple.of(id), execute ->{
@@ -130,8 +130,7 @@ public class QueryUtility
 
     public Future<JsonArray> getAll(String tableName)
     {
-        Promise<JsonArray> promise = Promise.promise();
-
+        var promise = Promise.<JsonArray>promise();
 
         client.preparedQuery("SELECT * FROM "+ tableName)
                 .execute(execute->{
@@ -168,9 +167,9 @@ public class QueryUtility
 
     public Future<JsonObject> get(String tableName, List<String> columns, JsonObject filter)
     {
-        Promise<JsonObject> promise = Promise.promise();
+        var promise = Promise.<JsonObject>promise();
 
-        String selectClause = columns.isEmpty() ? "*" : String.join(", ", columns);
+        var selectClause = columns.isEmpty() ? "*" : String.join(", ", columns);
 
         var whereClause = new StringBuilder();
 
@@ -188,10 +187,7 @@ public class QueryUtility
             values.add(entry.getValue());
         });
 
-        // Prepare the SQL query
-        String query = "SELECT " + selectClause + " FROM " + tableName + " WHERE " + whereClause;
-
-        client.preparedQuery(query)
+        client.preparedQuery("SELECT " + selectClause + " FROM " + tableName + " WHERE " + whereClause)
                 .execute(Tuple.from(values), execute ->
                 {
                     if (execute.succeeded())
@@ -256,7 +252,7 @@ public class QueryUtility
 
     public Future<Boolean> update(String tableName, JsonObject data, JsonObject filter)
     {
-        Promise<Boolean> promise = Promise.promise();
+        var promise = Promise.<Boolean>promise();
 
         var setClause = new StringBuilder();
 
@@ -289,11 +285,8 @@ public class QueryUtility
             values.add(entry.getValue());
         });
 
-        // Construct the final query
-        String query = "UPDATE " + tableName + " SET " + setClause + " WHERE " + whereClause;
-
         // Execute the query
-        client.preparedQuery(query)
+        client.preparedQuery("UPDATE " + tableName + " SET " + setClause + " WHERE " + whereClause)
                 .execute(Tuple.from(values), execute ->
                 {
                     if (execute.succeeded())

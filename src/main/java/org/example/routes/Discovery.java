@@ -1,6 +1,7 @@
 package org.example.routes;
 
 import io.vertx.core.Future;
+import org.example.Constants;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import io.vertx.core.json.JsonArray;
@@ -88,7 +89,7 @@ public class Discovery implements CrudOperations
                 return;
             }
 
-            QueryUtility.getInstance().get("discoveries", List.of("discovery_id"), new JsonObject().put("name", name))
+            QueryUtility.getInstance().get(Constants.DISCOVERIES, List.of("discovery_id"), new JsonObject().put("name", name))
                     .compose(result ->
                     {
                         if (!result.containsKey("error"))
@@ -99,7 +100,7 @@ public class Discovery implements CrudOperations
                         else
                         {
                             // If name is unique, insert
-                            return QueryUtility.getInstance().insert("discoveries",new JsonObject()
+                            return QueryUtility.getInstance().insert(Constants.DISCOVERIES,new JsonObject()
                                     .put("name",name)
                                     .put("ip",ip)
                                     .put("port",port)
@@ -187,7 +188,7 @@ public class Discovery implements CrudOperations
 
             var id = Long.parseLong(discoveryID);
 
-            QueryUtility.getInstance().update("discoveries",new JsonObject()
+            QueryUtility.getInstance().update(Constants.DISCOVERIES,new JsonObject()
                                     .put("name",name)
                                     .put("ip",ip)
                                     .put("port",port)
@@ -259,7 +260,7 @@ public class Discovery implements CrudOperations
         {
             var id = Long.parseLong(discoveryID);
 
-            QueryUtility.getInstance().delete("discoveries","discovery_id",id)
+            QueryUtility.getInstance().delete(Constants.DISCOVERIES,"discovery_id",id)
                     .onComplete(result->
                     {
                         if(result.succeeded())
@@ -324,7 +325,7 @@ public class Discovery implements CrudOperations
 
             var columns = List.of("credential_profile", "name", "ip","port","credential_profiles","status","hostname");
 
-            QueryUtility.getInstance().get("discoveries",columns,new JsonObject().put("discovery_id",id))
+            QueryUtility.getInstance().get(Constants.DISCOVERIES,columns,new JsonObject().put("discovery_id",id))
                     .onComplete(result->
                     {
                         if(result.succeeded())
@@ -376,7 +377,7 @@ public class Discovery implements CrudOperations
     {
         try
         {
-            QueryUtility.getInstance().getAll("discoveries")
+            QueryUtility.getInstance().getAll(Constants.DISCOVERIES)
                     .onComplete(result->
                     {
                         if(result.succeeded())
@@ -445,7 +446,7 @@ public class Discovery implements CrudOperations
             var columns = List.of("ip","port","credential_profiles");
 
                 //I will check whether this discovery ID is present in database or not
-                QueryUtility.getInstance().get("discoveries",columns,new JsonObject().put("discovery_id",id))
+                QueryUtility.getInstance().get(Constants.DISCOVERIES,columns,new JsonObject().put("discovery_id",id))
                         .compose(deviceInfo->
                         {
                             if (deviceInfo.containsKey("error"))
@@ -456,7 +457,7 @@ public class Discovery implements CrudOperations
                             List<String> values = List.of("object_id");
 
                             // Then I will check whether device is provisioned already or not
-                            return QueryUtility.getInstance().get("objects", values, new JsonObject().put("ip", deviceInfo.getString("ip")))
+                            return QueryUtility.getInstance().get(Constants.OBJECTS, values, new JsonObject().put("ip", deviceInfo.getString("ip")))
                                     .compose(objectInfo ->
                                     {
                                         if (!objectInfo.containsKey("error"))
@@ -480,11 +481,11 @@ public class Discovery implements CrudOperations
                         }
                         for (int i = 0; i < profiles.size(); i++)
                         {
-                            Long profileID = profiles.getLong(i);
+                            var profileID = profiles.getLong(i);
 
-                            List<String> fields = List.of("profile_id,profile_protocol","user_name","user_password","community","version");
+                            var fields = List.of("profile_id,profile_protocol","user_name","user_password","community","version");
 
-                            Future<JsonObject> credentialFuture = QueryUtility.getInstance().get("credentials", fields, new JsonObject().put("profile_id",profileID))
+                            var credentialFuture = QueryUtility.getInstance().get(Constants.CREDENTIALS, fields, new JsonObject().put("profile_id",profileID))
 
                                     .onSuccess(result -> {
                                         logger.info("Credential fetch succeeded for profile ID {}", profileID);
@@ -503,7 +504,7 @@ public class Discovery implements CrudOperations
 
                                     for (int i = 0; i < compositeFuture.size(); i++)
                                     {
-                                        JsonObject result = compositeFuture.resultAt(i);
+                                        var result = compositeFuture.<JsonObject>resultAt(i);
 
                                         if (!result.containsKey("error"))
                                         {
@@ -537,10 +538,10 @@ public class Discovery implements CrudOperations
                     {
                         try
                         {
-                            QueryUtility.getInstance().get("discoveries", List.of("port"), new JsonObject().put("discovery_id", id))
+                            QueryUtility.getInstance().get(Constants.DISCOVERIES, List.of("port"), new JsonObject().put("discovery_id", id))
                                     .compose(portResult ->
                                     {
-                                        Integer port = portResult.getInteger("port");
+                                        var port = portResult.getInteger("port");
 
                                         if (port == 161)
                                         {
@@ -588,7 +589,7 @@ public class Discovery implements CrudOperations
                             // Update the status in the database after removing credential profiles
                             deviceInfo.remove("discovery.credential.profiles");
 
-                            return QueryUtility.getInstance().update("discoveries",deviceInfo,new JsonObject().put("discovery_id",id))
+                            return QueryUtility.getInstance().update(Constants.DISCOVERIES,deviceInfo,new JsonObject().put("discovery_id",id))
                                     .compose(updateResult -> {
                                         if (updateResult)
                                         {
@@ -628,10 +629,18 @@ public class Discovery implements CrudOperations
             {
                 if (Util.checkConnection(deviceInfo))
                 {
+                    deviceInfo.remove("event.type");
+
+                    deviceInfo.remove("device.type");
+
                     deviceInfo.put("status", "Up");
                 }
                 else
                 {
+                    deviceInfo.remove("event.type");
+
+                    deviceInfo.remove("device.type");
+
                     deviceInfo.put("credential_profile", null);
 
                     deviceInfo.put("status", "Down");

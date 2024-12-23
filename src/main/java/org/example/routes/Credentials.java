@@ -1,6 +1,7 @@
 package org.example.routes;
 
 import io.vertx.core.Future;
+import org.example.Constants;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import io.vertx.core.json.JsonObject;
@@ -9,7 +10,6 @@ import io.vertx.ext.web.RoutingContext;
 import org.example.database.QueryUtility;
 
 import java.util.List;
-import java.util.Objects;
 
 public class Credentials implements CrudOperations
 {
@@ -60,7 +60,7 @@ public class Credentials implements CrudOperations
 
             var columns = List.of("profile_id");
 
-            QueryUtility.getInstance().get("credentials", columns, new JsonObject().put("user_name", name))
+            QueryUtility.getInstance().get(Constants.CREDENTIALS, columns, new JsonObject().put("user_name", name))
                     .compose(result ->
                     {
                         if (!result.containsKey("error"))
@@ -71,7 +71,7 @@ public class Credentials implements CrudOperations
                         else
                         {
                             // If name is unique, insert
-                            return QueryUtility.getInstance().insert("credentials",new JsonObject()
+                            return QueryUtility.getInstance().insert(Constants.CREDENTIALS,new JsonObject()
                                     .put("profile_name",name)
                                     .put("profile_protocol",protocol)
                                     .put("user_name",requestBody.getString("user.name"))
@@ -144,7 +144,7 @@ public class Credentials implements CrudOperations
         {
             var id = Long.parseLong(credentialID);
 
-            QueryUtility.getInstance().update("credentials",
+            QueryUtility.getInstance().update(Constants.CREDENTIALS,
                                                     new JsonObject()
                                                             .put("profile_name", name)
                                                             .put("profile_protocol", protocol)
@@ -215,7 +215,7 @@ public class Credentials implements CrudOperations
         {
             var id = Long.parseLong(credentialID);
 
-            QueryUtility.getInstance().delete("credentials","profile_id",id)
+            QueryUtility.getInstance().delete(Constants.CREDENTIALS,"profile_id",id)
                     .onComplete(result ->
                     {
                         if (result.succeeded()) {
@@ -281,7 +281,7 @@ public class Credentials implements CrudOperations
 
             var columns = List.of("profile_name", "profile_protocol", "user_name","user_password","community","version");
 
-            QueryUtility.getInstance().get("credentials",columns,new JsonObject().put("profile_id",id))
+            QueryUtility.getInstance().get(Constants.CREDENTIALS,columns,new JsonObject().put("profile_id",id))
                     .onComplete(result->
                     {
                         if(result.succeeded())
@@ -332,7 +332,7 @@ public class Credentials implements CrudOperations
     {
         try
         {
-            QueryUtility.getInstance().getAll("credentials")
+            QueryUtility.getInstance().getAll(Constants.CREDENTIALS)
                     .onComplete(result->
                     {
                         if(result.succeeded())

@@ -22,7 +22,7 @@ public class Poller extends AbstractVerticle
             var columns = List.of("profile_protocol","user_name","user_password","community","version");
 
             //Fetching device details through credential profile ID as that details will also be needed
-            QueryUtility.getInstance().get("credentials",columns,new JsonObject().put("profile_id",pollingData.getLong("credential.profile")))
+            QueryUtility.getInstance().get(Constants.CREDENTIALS,columns,new JsonObject().put("profile_id",pollingData.getLong("credential.profile")))
                     .onSuccess(deviceInfo->
                     {
                         pollingData.put("profile.protocol",deviceInfo.getString("profile_protocol"))
@@ -31,9 +31,13 @@ public class Poller extends AbstractVerticle
                                 .put("community",deviceInfo.getString("community"))
                                 .put("version",deviceInfo.getString("version"));
 
+                        var timestamp = pollingData.getString("timestamp");
+
                         pollingData.remove("credential.profile");
 
-                        startPoll(pollingData);
+                        pollingData.remove("timestamp");
+
+                        startPoll(pollingData,timestamp);
                     })
                     .onFailure(error ->
                     {
@@ -43,7 +47,7 @@ public class Poller extends AbstractVerticle
         });
     }
 
-    private void startPoll(JsonObject pollingData)
+    private void startPoll(JsonObject pollingData, String timestamp)
     {
         logger.info("Started polling of ip: {}",pollingData.getString("ip"));
 
@@ -52,25 +56,28 @@ public class Poller extends AbstractVerticle
             try
             {
                 // Start the process
-                Process process = new ProcessBuilder("/home/aakash/Plugin/polling/polling", pollingData.encode())
+                pollingData.put("event.type","poll");
+
+                Process process = new ProcessBuilder("/home/aakash/Plugin/modified/modified", pollingData.encode())
                         .redirectErrorStream(true).start();
 
                 // Capture output from the Go executable
                 var output = new String(process.getInputStream().readAllBytes());
 
-                var error = new String(process.getErrorStream().readAllBytes());
+                var exitCode = process.waitFor();
 
-                process.waitFor();
-
-                if (!error.isEmpty())
+                if (exitCode != 0)
                 {
-                    logger.error("Error from Go executable: {}", error);
+                    logger.error("Go executable failed with error: {}", output.trim());
+
+                    promise.fail(new RuntimeException("Polling failed"));
                 }
                 else
                 {
-                    logger.info("Metrics collected: {}", output);
+                    logger.info("Metrics collected: {}", output.trim());
+
+                    promise.complete(output.trim());
                 }
-                promise.complete(output);
             }
             catch (Exception exception)
             {
@@ -82,6 +89,17 @@ public class Poller extends AbstractVerticle
         {
             if (res.succeeded())
             {
+                Bootstrap.vertx.eventBus().request(Constants.FILE_WRITE,new JsonObject().put("ip",pollingData.getString("ip")).put("metric.group",pollingData.getString("metric.group.name")).put("metrics", res.result()).put("timestamp",timestamp),reply->{
+                    if (reply.succeeded())
+                    {
+                        logger.info("Metrics stored successfully: {}", reply.result().body());
+                    }
+                    else
+                    {
+                        logger.error("Failed to store metrics for ip: {}", pollingData.getString("ip"), reply.cause());
+                    }
+                });
+
                 logger.info("Metrics fetched successfully for ip: {}", pollingData.getString("ip"));
             }
             else

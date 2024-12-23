@@ -7,6 +7,8 @@ import java.io.InputStreamReader;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.util.concurrent.TimeUnit;
+
+import org.example.Constants;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -112,15 +114,13 @@ public class Util
     {
         try
         {
-            // Extract device information from the JSON object
-            var ip = deviceInfo.getString("ip");
+            // Setting event type to discover
+            deviceInfo.put("event.type","discover");
 
-            var port = deviceInfo.getInteger("port");
-
-            var credentials = deviceInfo.getJsonArray("discovery.credential.profiles").encode();
+            deviceInfo.put("device.type",deviceInfo.getInteger("port") == Constants.SSH_PORT ? "Linux" : "SNMP");
 
             // Spawning a process
-            Process process = new ProcessBuilder("/home/aakash/Plugin/connection/main", ip, String.valueOf(port), credentials)
+            Process process = new ProcessBuilder("/home/aakash/Plugin/modified/modified", deviceInfo.encode())
                     .redirectErrorStream(true).start();
 
             // Wait for the process to complete within 60 seconds

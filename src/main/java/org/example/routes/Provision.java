@@ -14,17 +14,26 @@ import java.util.List;
 
 import static org.example.Bootstrap.vertx;
 
-
 public class Provision
 {
     private static final Logger logger = LoggerFactory.getLogger(Provision.class);
 
-    private final HashMap<String, Integer> metric = new HashMap<>()
+    private final HashMap<String, Integer> linuxMetrics = new HashMap<>()
     {{
         put("Linux.Device", Constants.DEVICE_POLL_INTERVAL);
+
         put("Linux.CPU", Constants.CPU_POLL_INTERVAL);
+
         put("Linux.Process", Constants.PROCESS_POLL_INTERVAL);
+
         put("Linux.Disk", Constants.DISK_POLL_INTERVAL);
+    }};
+
+    private final HashMap<String, Integer> snmpMetrics = new HashMap<>()
+    {{
+        put("SNMP.Device", Constants.SNMP_POLL_INTERVAL);
+
+        put("SNMP.INTERFACE", Constants.INTERFACE_POLL_INTERVAL);
     }};
 
     public void route(Router provisionRouter)
@@ -32,7 +41,6 @@ public class Provision
         try
         {
             provisionRouter.post("/:id").handler(this::provision);
-
         }
         catch(Exception exception)
         {
@@ -57,10 +65,10 @@ public class Provision
         {
             var id = Long.parseLong(discoveryID);
 
-            var columns = List.of("credential_profile","ip","status","hostname");
+            var columns = List.of("credential_profile","ip","port","status","hostname");
 
             //First I will check do discoveryID exists or not
-            QueryUtility.getInstance().get("discoveries", columns, new JsonObject().put("discovery_id", id))
+            QueryUtility.getInstance().get(Constants.DISCOVERIES, columns, new JsonObject().put("discovery_id", id))
                     .compose(discoveryInfo ->
                     {
                         if (discoveryInfo.containsKey("error"))
@@ -73,7 +81,7 @@ public class Provision
                         }
                         // Secondly I will check if device is already provisioned or not
                         return QueryUtility.getInstance()
-                                .get("objects", List.of("ip"), new JsonObject().put("ip", discoveryInfo.getString("ip")))
+                                .get(Constants.OBJECTS, List.of("ip"), new JsonObject().put("ip", discoveryInfo.getString("ip")))
 
                                 .compose(existingObject ->
                                 {
@@ -87,10 +95,11 @@ public class Provision
                     .compose(discoveryInfo ->
                     {
                         // Proceed to insert the device into the 'objects' table
-                        return QueryUtility.getInstance().insert("objects", new JsonObject()
+                        return QueryUtility.getInstance().insert(Constants.OBJECTS, new JsonObject()
                                 .put("credential_profile", discoveryInfo.getLong("credential_profile"))
                                 .put("ip", discoveryInfo.getString("ip"))
-                                .put("hostname", discoveryInfo.getString("hostname")))
+                                .put("hostname", discoveryInfo.getString("hostname"))
+                                        .put("device_type",discoveryInfo.getInteger("port") == Constants.SSH_PORT ? "Linux" : "SNMP"))
                                 .map(insertedId ->
                                 {
                                     discoveryInfo.put("object_id", insertedId);
@@ -103,9 +112,9 @@ public class Provision
                         // Attaching metrics for the provisioned object
                         List<Future<Long>> metricFutures = new ArrayList<>();
 
-                        metric.forEach((key, value) ->
+                        (discoveryInfo.getInteger("port") == Constants.SSH_PORT ? linuxMetrics : snmpMetrics).forEach((key, value) ->
                         {
-                            metricFutures.add(QueryUtility.getInstance().insert("metrics", new JsonObject()
+                            metricFutures.add(QueryUtility.getInstance().insert(Constants.METRICS, new JsonObject()
                                     .put("metric_group_name", key)
                                     .put("metric_poll_time", value)
                                     .put("metric_object", discoveryInfo.getLong("object_id"))));
@@ -146,5 +155,4 @@ public class Provision
                             .put("error",exception.getCause().getMessage()).encodePrettily());
         }
     }
-
 }

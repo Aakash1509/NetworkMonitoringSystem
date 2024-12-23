@@ -5,30 +5,31 @@ import io.vertx.core.Promise;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.Router;
 import io.vertx.ext.web.handler.BodyHandler;
+import org.example.Bootstrap;
 import org.example.Constants;
 
 public class Server extends AbstractVerticle
 {
     public void start(Promise<Void> promise)
     {
-        var router = Router.router(vertx);
+        var router = Router.router(Bootstrap.vertx);
 
         //A)Credential Module : Credential Router for handling Credential routes
-        var credentialRouter = Router.router(vertx);
+        var credentialRouter = Router.router(Bootstrap.vertx);
 
         router.route("/api/v1/credentials/*").handler(BodyHandler.create()).subRouter(credentialRouter);
 
         new Credentials().route(credentialRouter);
 
         //B)Discovery Module : Discovery Router for handling Discovery routes
-        var discoveryRouter = Router.router(vertx);
+        var discoveryRouter = Router.router(Bootstrap.vertx);
 
         router.route("/api/v1/discovery/*").handler(BodyHandler.create()).subRouter(discoveryRouter);
 
         new Discovery().route(discoveryRouter); //Instead of var discoveryObject = new Discovery();discoveryObject.route(discoveryRouter)
 
         //C)Provision Module : Provision Router for handling Provision routes
-        var provisionRouter = Router.router(vertx);
+        var provisionRouter = Router.router(Bootstrap.vertx);
 
         router.route("/api/v1/provision/*").subRouter(provisionRouter);
 

@@ -2,6 +2,7 @@ package org.example;
 
 import io.vertx.core.Vertx;
 import org.example.poll.Poller;
+import org.example.utilities.FileWriter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.example.poll.Scheduler;
@@ -21,11 +22,13 @@ public class Bootstrap
 
                 .compose(result -> vertx.deployVerticle(new Poller()))
 
+                .compose(result -> vertx.deployVerticle(new FileWriter()))
+
                 .onComplete(result ->
                 {
                     if (result.succeeded())
                     {
-                        logger.info("All verticles deployed successfully: Server, Scheduler, and Poller");
+                        logger.info("All verticles deployed successfully: Server, Scheduler, Poller and FileWriter");
                     }
                     else
                     {
