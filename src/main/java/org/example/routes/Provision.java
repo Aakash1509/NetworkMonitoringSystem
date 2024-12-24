@@ -1,5 +1,6 @@
 package org.example.routes;
 import io.vertx.core.Future;
+import org.example.Bootstrap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import io.vertx.core.json.JsonObject;
@@ -11,8 +12,7 @@ import org.example.Constants;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
-
-import static org.example.Bootstrap.vertx;
+import java.util.Objects;
 
 public class Provision
 {
@@ -33,7 +33,7 @@ public class Provision
     {{
         put("SNMP.Device", Constants.SNMP_POLL_INTERVAL);
 
-        put("SNMP.INTERFACE", Constants.INTERFACE_POLL_INTERVAL);
+        put("SNMP.Interface", Constants.INTERFACE_POLL_INTERVAL);
     }};
 
     public void route(Router provisionRouter)
@@ -65,7 +65,7 @@ public class Provision
         {
             var id = Long.parseLong(discoveryID);
 
-            var columns = List.of("credential_profile","ip","port","status","hostname");
+            var columns = List.of("credential_profile","ip","port","device_type","status","hostname");
 
             //First I will check do discoveryID exists or not
             QueryUtility.getInstance().get(Constants.DISCOVERIES, columns, new JsonObject().put("discovery_id", id))
@@ -99,7 +99,7 @@ public class Provision
                                 .put("credential_profile", discoveryInfo.getLong("credential_profile"))
                                 .put("ip", discoveryInfo.getString("ip"))
                                 .put("hostname", discoveryInfo.getString("hostname"))
-                                        .put("device_type",discoveryInfo.getInteger("port") == Constants.SSH_PORT ? "Linux" : "SNMP"))
+                                        .put("device_type",discoveryInfo.getString("device_type")))
                                 .map(insertedId ->
                                 {
                                     discoveryInfo.put("object_id", insertedId);
@@ -112,7 +112,7 @@ public class Provision
                         // Attaching metrics for the provisioned object
                         List<Future<Long>> metricFutures = new ArrayList<>();
 
-                        (discoveryInfo.getInteger("port") == Constants.SSH_PORT ? linuxMetrics : snmpMetrics).forEach((key, value) ->
+                        (Objects.equals(discoveryInfo.getString("device_type"), "Linux") ? linuxMetrics : snmpMetrics).forEach((key, value) ->
                         {
                             metricFutures.add(QueryUtility.getInstance().insert(Constants.METRICS, new JsonObject()
                                     .put("metric_group_name", key)
@@ -124,11 +124,12 @@ public class Provision
                     })
                     .onSuccess(result ->
                     {
-                        vertx.eventBus().send(Constants.OBJECT_PROVISION,new JsonObject()
+                        Bootstrap.vertx.eventBus().send(Constants.OBJECT_PROVISION,new JsonObject()
                                 .put("object_id",result.getLong("object_id"))
                                 .put("credential_profile", result.getLong("credential_profile"))
                                 .put("ip",result.getString("ip"))
-                                .put("hostname",result.getString("hostname")));
+                                .put("hostname",result.getString("hostname"))
+                                .put("device_type",result.getString("device_type")));
 
                         context.response()
                                 .setStatusCode(201)
@@ -136,7 +137,8 @@ public class Provision
                                         .put("status.code",201)
                                         .put("message","Device provisioned successfully")
                                         .put("data",new JsonObject()
-                                                .put("object.id", result.getLong("object_id"))).encodePrettily());
+                                                .put("object.id", result.getLong("object_id"))
+                                                .put("device.type",result.getString("device_type"))).encodePrettily());
                     })
                     .onFailure(error -> context.response()
                             .setStatusCode(400)

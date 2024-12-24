@@ -10,6 +10,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import io.vertx.core.json.JsonObject;
 import org.example.database.QueryUtility;
+
+import java.sql.Timestamp;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -82,7 +84,7 @@ public class Scheduler extends AbstractVerticle
 
                         for (int i = 0; i < objectsArray.size(); i++)
                         {
-                            // Object will contain information like object_id, credential_profile, ip, and hostname
+                            // Object will contain information like object_id, credential_profile, ip, hostname and device_type
                             var object = objectsArray.getJsonObject(i);
 
                             var objectId = object.getLong("object_id");
@@ -165,26 +167,27 @@ public class Scheduler extends AbstractVerticle
             var pollTime = metricData.getInteger("metric_poll_time") * 1000L; // To convert to milliseconds
 
             var lastPolled = metricData.getString("last_polled") != null
-                    ? LocalDateTime.parse(metricData.getString("last_polled"), DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSSSSS"))
+                    ? LocalDateTime.parse(metricData.getString("last_polled"), DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss"))
                     : null;
 
-            var currentTime = LocalDateTime.now();
-
             var currentMillis = System.currentTimeMillis();
+
+            var currentTime = LocalDateTime.now();
 
             if (lastPolled == null || currentMillis - lastPolled.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli() >= pollTime)
             {
                 Bootstrap.vertx.eventBus().send(Constants.OBJECT_POLL, new JsonObject()
                         .put("credential.profile", objectData.getLong("credential_profile"))
                         .put("ip", objectData.getString("ip"))
+                                .put("device_type",objectData.getString("device_type"))
                         .put("metric.group.name", metricData.getString("metric_group_name"))
-                        .put("timestamp",currentTime.format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSSSSS"))));
+                        .put("timestamp",currentMillis));
 
                 logger.info("Polling triggered for {} at {}", objectData.getString("hostname"), objectData.getString("ip"));
 
                 // Update the last polled time in the hashmap
 
-                metricData.put("last_polled", currentTime.format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSSSSS")));
+                metricData.put("last_polled", currentTime.format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss")));
 
                 // Update last polled time in the database
 
@@ -207,6 +210,5 @@ public class Scheduler extends AbstractVerticle
         {
             logger.error(exception.getMessage(),exception);
         }
-
     }
 }

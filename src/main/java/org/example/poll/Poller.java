@@ -33,6 +33,8 @@ public class Poller extends AbstractVerticle
 
                         var timestamp = pollingData.getString("timestamp");
 
+                        //As I don't require these 2 values in plugin , so I am separately passing the timestamp
+
                         pollingData.remove("credential.profile");
 
                         pollingData.remove("timestamp");
@@ -56,9 +58,9 @@ public class Poller extends AbstractVerticle
             try
             {
                 // Start the process
-                pollingData.put("event.type","poll");
+                pollingData.put(Constants.EVENT_TYPE,Constants.POLL);
 
-                Process process = new ProcessBuilder("/home/aakash/Plugin/modified/modified", pollingData.encode())
+                Process process = new ProcessBuilder(Constants.PLUGIN_PATH, pollingData.encode())
                         .redirectErrorStream(true).start();
 
                 // Capture output from the Go executable

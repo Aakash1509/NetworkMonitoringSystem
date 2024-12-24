@@ -53,13 +53,13 @@ public class FileWriter extends AbstractVerticle
                         return;
                     }
                 }
-                vertx.fileSystem().writeFile(Constants.BASE_DIRECTORY + "/" + String.format("%s_%s.txt", ip, timestamp.replace("T", " ")),
+                vertx.fileSystem().writeFile(Constants.BASE_DIRECTORY + "/" + String.format("%s_%s.txt", ip, timestamp),
                         Buffer.buffer(new JsonObject().put("result", new JsonObject().put(metricName, metrics)).encodePrettily()),
                         writeResult ->
                         {
                             if (writeResult.succeeded())
                             {
-                                message.reply("File written successfully: " + ip + "_" + timestamp.replace("T", " ") + ".txt");
+                                message.reply("File written successfully: " + ip + "_" + timestamp + ".txt");
                             }
                             else
                             {

@@ -110,17 +110,15 @@ public class Util
         }
     }
 
-    public static boolean checkConnection(JsonObject deviceInfo)
+    public static void checkConnection(JsonObject deviceInfo)
     {
         try
         {
             // Setting event type to discover
-            deviceInfo.put("event.type","discover");
-
-            deviceInfo.put("device.type",deviceInfo.getInteger("port") == Constants.SSH_PORT ? "Linux" : "SNMP");
+            deviceInfo.put(Constants.EVENT_TYPE,Constants.DISCOVER);
 
             // Spawning a process
-            Process process = new ProcessBuilder("/home/aakash/Plugin/modified/modified", deviceInfo.encode())
+            Process process = new ProcessBuilder(Constants.PLUGIN_PATH, deviceInfo.encode())
                     .redirectErrorStream(true).start();
 
             // Wait for the process to complete within 60 seconds
@@ -131,8 +129,15 @@ public class Util
                 process.destroy();
 
                 logger.warn("Connection check timed out");
+
+                deviceInfo.put("credential_profile",null);
+
+                deviceInfo.put("hostname",null);
+
+                deviceInfo.put("status", "Down");
+
+                return;
                 // Terminate the process if it times out
-                return false;
             }
 
             // Output from the Go executable
@@ -143,24 +148,18 @@ public class Util
             logger.info("Output from Go executable: {}", output);
 
             // Parse the output and update the deviceInfo JSON object
-            if (output != null && !output.isEmpty() && !output.contains("Failed"))
-            {
-                JsonObject result = new JsonObject(output);
 
-                deviceInfo.put("credential_profile", result.getLong("credential.profile.id"));
+            JsonObject result = new JsonObject(output);
 
-                deviceInfo.put("hostname", result.getString("hostname").trim());
+            deviceInfo.put("credential_profile", result.getLong("credential.profile.id"));
 
-                return "Up".equals(result.getString("status"));
-            }
+            deviceInfo.put("hostname", result.getString("hostname") != null ? result.getString("hostname").trim() : null);
 
-            return false; // Return false if the output is empty or invalid
+            deviceInfo.put("status", result.getString("status") != null ? result.getString("status").trim() : null);
         }
         catch (Exception exception)
         {
             logger.error("Error during connection making: {}", exception.getMessage());
-
-            return false;
         }
     }
 }

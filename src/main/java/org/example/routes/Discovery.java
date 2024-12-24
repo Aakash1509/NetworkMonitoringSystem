@@ -56,9 +56,11 @@ public class Discovery implements CrudOperations
 
             var port = requestBody.getInteger("discovery.port");
 
+            var device_type = requestBody.getString("device.type");
+
             var credential_profiles = requestBody.getJsonArray("discovery.credential.profiles");
 
-            if(name == null || name.isEmpty() || ip == null || ip.isEmpty() || port == null || credential_profiles == null || credential_profiles.isEmpty())
+            if(name == null || name.isEmpty() || ip == null || ip.isEmpty() || port == null || credential_profiles == null || credential_profiles.isEmpty() || device_type == null || device_type.isEmpty())
             {
                 context.response()
                         .setStatusCode(500)
@@ -105,6 +107,7 @@ public class Discovery implements CrudOperations
                                     .put("ip",ip)
                                     .put("port",port)
                                     .put("credential_profiles",credential_profiles)
+                                            .put("device_type",device_type)
                                     .put("status","Down"));
                         }
                     })
@@ -152,9 +155,11 @@ public class Discovery implements CrudOperations
 
         var port = requestBody.getInteger("discovery.port");
 
+        var device_type = requestBody.getString("device.type");
+
         var credential_profiles = requestBody.getJsonArray("discovery.credential.profiles");
 
-        if(name == null || name.isEmpty() || ip == null || ip.isEmpty() || port == null || credential_profiles == null || credential_profiles.isEmpty())
+        if(name == null || name.isEmpty() || ip == null || ip.isEmpty() || port == null || credential_profiles == null || credential_profiles.isEmpty() || device_type == null || device_type.isEmpty())
         {
             context.response()
                     .setStatusCode(500)
@@ -192,7 +197,8 @@ public class Discovery implements CrudOperations
                                     .put("name",name)
                                     .put("ip",ip)
                                     .put("port",port)
-                                    .put("credential_profiles",credential_profiles),new JsonObject().put("discovery_id",id))
+                                    .put("credential_profiles",credential_profiles)
+                                    .put("device_type",device_type),new JsonObject().put("discovery_id",id))
 
                     .onComplete(result->
                     {
@@ -323,7 +329,7 @@ public class Discovery implements CrudOperations
         {
             var id = Long.parseLong(discoveryID);
 
-            var columns = List.of("credential_profile", "name", "ip","port","credential_profiles","status","hostname");
+            var columns = List.of("credential_profile", "name", "ip","port","device_type","credential_profiles","status","hostname");
 
             QueryUtility.getInstance().get(Constants.DISCOVERIES,columns,new JsonObject().put("discovery_id",id))
                     .onComplete(result->
@@ -443,7 +449,7 @@ public class Discovery implements CrudOperations
         {
             var id = Long.parseLong(discoveryID);
 
-            var columns = List.of("ip","port","credential_profiles");
+            var columns = List.of("ip","port","device_type","credential_profiles");
 
                 //I will check whether this discovery ID is present in database or not
                 QueryUtility.getInstance().get(Constants.DISCOVERIES,columns,new JsonObject().put("discovery_id",id))
@@ -497,6 +503,7 @@ public class Discovery implements CrudOperations
                             credentialFutures.add(credentialFuture);
                         }
 
+                        //Need to wait for each credential profile to get their respective credentials
                         return Future.join(credentialFutures)
                                 .map(compositeFuture ->
                                 {
@@ -627,27 +634,10 @@ public class Discovery implements CrudOperations
         {
             try
             {
-                if (Util.checkConnection(deviceInfo))
-                {
-                    deviceInfo.remove("event.type");
+                Util.checkConnection(deviceInfo);
 
-                    deviceInfo.remove("device.type");
+                deviceInfo.remove(Constants.EVENT_TYPE);
 
-                    deviceInfo.put("status", "Up");
-                }
-                else
-                {
-                    deviceInfo.remove("event.type");
-
-                    deviceInfo.remove("device.type");
-
-                    deviceInfo.put("credential_profile", null);
-
-                    deviceInfo.put("status", "Down");
-
-                    deviceInfo.put("hostname", null);
-
-                }
                 promise.complete(deviceInfo);
             }
             catch (Exception exception)
