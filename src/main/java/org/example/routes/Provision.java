@@ -137,8 +137,7 @@ public class Provision
                                         .put("status.code",201)
                                         .put("message","Device provisioned successfully")
                                         .put("data",new JsonObject()
-                                                .put("object.id", result.getLong("object_id"))
-                                                .put("device.type",result.getString("device_type"))).encodePrettily());
+                                                .put("object.id", result.getLong("object_id"))).encodePrettily());
                     })
                     .onFailure(error -> context.response()
                             .setStatusCode(400)

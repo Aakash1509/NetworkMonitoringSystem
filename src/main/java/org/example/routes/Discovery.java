@@ -9,7 +9,7 @@ import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.Router;
 import io.vertx.ext.web.RoutingContext;
 import org.example.database.QueryUtility;
-import org.example.utilities.Util;
+import org.example.util.Helper;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -71,7 +71,7 @@ public class Discovery implements CrudOperations
                 return;
             }
 
-            if (!Util.validIp(ip))
+            if (!Helper.validIp(ip))
             {
                 context.response()
                         .setStatusCode(400)
@@ -81,7 +81,7 @@ public class Discovery implements CrudOperations
                 return;
             }
 
-            if (Util.validPort(port))
+            if (Helper.validPort(port))
             {
                 context.response()
                         .setStatusCode(400)
@@ -171,7 +171,7 @@ public class Discovery implements CrudOperations
         }
         try
         {
-            if (!Util.validIp(ip))
+            if (!Helper.validIp(ip))
             {
                 context.response()
                         .setStatusCode(400)
@@ -181,7 +181,7 @@ public class Discovery implements CrudOperations
                 return;
             }
 
-            if (Util.validPort(port))
+            if (Helper.validPort(port))
             {
                 context.response()
                         .setStatusCode(400)
@@ -527,7 +527,7 @@ public class Discovery implements CrudOperations
                     {
                         try
                         {
-                            if (Util.ping(deviceInfo.getString("ip")))
+                            if (Helper.ping(deviceInfo.getString("ip")))
                             {
                                 pingFuture.complete(deviceInfo);
                             }
@@ -558,7 +558,7 @@ public class Discovery implements CrudOperations
                                         // Check if the port is open
                                         return Future.future(promise ->
                                         {
-                                            if (Util.isPortOpen(deviceInfo.getString("ip"), port))
+                                            if (Helper.isPortOpen(deviceInfo.getString("ip"), port))
                                             {
                                                 promise.complete(deviceInfo);
                                             }
@@ -634,7 +634,7 @@ public class Discovery implements CrudOperations
         {
             try
             {
-                Util.checkConnection(deviceInfo);
+                Helper.checkConnection(deviceInfo);
 
                 deviceInfo.remove(Constants.EVENT_TYPE);
 

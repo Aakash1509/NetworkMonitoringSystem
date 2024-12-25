@@ -32,17 +32,17 @@ public class Constants
 
     public static final String FILE_WRITE = "file.write";
 
-    public static final int SNMP_POLL_INTERVAL = 20;
+    public static final int SNMP_POLL_INTERVAL = 180;
 
-    public static final int INTERFACE_POLL_INTERVAL = 20;
+    public static final int INTERFACE_POLL_INTERVAL = 210;
 
-    public static final int DEVICE_POLL_INTERVAL = 30;
+    public static final int DEVICE_POLL_INTERVAL = 60;
 
-    public static final int CPU_POLL_INTERVAL = 30;
+    public static final int CPU_POLL_INTERVAL = 90;
 
-    public static final int DISK_POLL_INTERVAL = 30;
+    public static final int DISK_POLL_INTERVAL = 120;
 
-    public static final int PROCESS_POLL_INTERVAL = 30;
+    public static final int PROCESS_POLL_INTERVAL = 150;
 
     public static final String EVENT_TYPE = "event.type";
 
@@ -51,6 +51,14 @@ public class Constants
     public static final String DISCOVER = "discover";
 
     public static final String PLUGIN_PATH = "/home/aakash/Plugin/connection/connection";
+
+    public static final String IP = "127.0.0.1";
+
+    public static final int ZMQ_PORT = 5555;
+
+    public static final int PERIODIC_INTERVAL = 5000;
+
+    public static final int DATABASE_INTERVAL = 10000;
 
 
 }

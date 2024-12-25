@@ -1,4 +1,4 @@
-package org.example.utilities;
+package org.example.util;
 
 import io.vertx.core.json.JsonObject;
 
@@ -14,9 +14,9 @@ import org.slf4j.LoggerFactory;
 
 import java.util.regex.Pattern;
 
-public class Util
+public class Helper
 {
-    private static final Logger logger = LoggerFactory.getLogger(Util.class);
+    private static final Logger logger = LoggerFactory.getLogger(Helper.class);
 
     public static boolean validIp(String ip)
     {

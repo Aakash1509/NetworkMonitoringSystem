@@ -4,14 +4,11 @@ import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Future;
 import io.vertx.core.Promise;
 import io.vertx.core.json.JsonArray;
-import org.example.Bootstrap;
 import org.example.Constants;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import io.vertx.core.json.JsonObject;
 import org.example.database.QueryUtility;
-
-import java.sql.Timestamp;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -23,8 +20,6 @@ public class Scheduler extends AbstractVerticle
 {
     private static final Logger logger = LoggerFactory.getLogger(Scheduler.class);
 
-    private static final int PERIODIC_INTERVAL = 5000;
-
     private final Map<Long,JsonObject> pollDevices = new HashMap<>(); //Will contain provisioned devices
 
     public void start()
@@ -32,7 +27,8 @@ public class Scheduler extends AbstractVerticle
         try
         {
             //If device is provisioned after I have fetched provisioned devices from database
-            Bootstrap.vertx.eventBus().<JsonObject>localConsumer(Constants.OBJECT_PROVISION, object->{
+            vertx.eventBus().<JsonObject>localConsumer(Constants.OBJECT_PROVISION, object->
+            {
                 var objectID = object.body().getLong("object_id");
 
                 fetchMetricData(objectID)
@@ -47,13 +43,13 @@ public class Scheduler extends AbstractVerticle
                         .onFailure(err -> logger.error("Failed to fetch {}: {}", objectID, err.getMessage()));
             });
 
-            //Will fetch provisioned devices from database
+            //Will fetch provisioned devices from database as soon as this verticle deploys
             getDevices()
                     .onSuccess(v->
                     {
                         logger.info("Provisioned devices in database fetched successfully.");
 
-                        vertx.setPeriodic(PERIODIC_INTERVAL,id-> checkAndPreparePolling());
+                        vertx.setPeriodic(Constants.PERIODIC_INTERVAL,id-> checkAndPreparePolling());
 
                     })
                     .onFailure(error->
@@ -62,7 +58,7 @@ public class Scheduler extends AbstractVerticle
 
                         //If initially there are no provisioned devices still I need to keep periodically checking as devices can be provisioned afterwards
 
-                        vertx.setPeriodic(PERIODIC_INTERVAL,id-> checkAndPreparePolling());
+                        vertx.setPeriodic(Constants.PERIODIC_INTERVAL,id-> checkAndPreparePolling());
                     });
         }
         catch (Exception exception)
@@ -172,32 +168,33 @@ public class Scheduler extends AbstractVerticle
             var pollTime = metricData.getInteger("metric_poll_time") * 1000L; // To convert to milliseconds
 
             var lastPolled = metricData.getString("last_polled") != null
-                    ? LocalDateTime.parse(metricData.getString("last_polled"), DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS"))
+                    ? LocalDateTime.parse(metricData.getString("last_polled"), DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss"))
+                    .atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
                     : null;
 
-            var currentTime = LocalDateTime.now();
+            var currentMillis = System.currentTimeMillis();
 
-            var currentMillis = currentTime.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli();
-
-            if (lastPolled == null || currentMillis - lastPolled.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli() >= pollTime)
+            if (lastPolled == null || currentMillis - lastPolled >= pollTime)
             {
-                Bootstrap.vertx.eventBus().send(Constants.OBJECT_POLL, new JsonObject()
+                vertx.eventBus().send(Constants.OBJECT_POLL, new JsonObject()
                         .put("credential.profile", objectData.getLong("credential_profile"))
                         .put("ip", objectData.getString("ip"))
                                 .put("device_type",objectData.getString("device_type"))
                         .put("metric.group.name", metricData.getString("metric_group_name"))
-                        .put("timestamp",currentTime.format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSS"))));
+                        .put("timestamp",currentMillis/1000));
 
                 logger.info("Polling triggered for {} at {}", objectData.getString("hostname"), objectData.getString("ip"));
 
                 // Update the last polled time in the hashmap
 
-                metricData.put("last_polled", currentTime.format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS")));
+                var currentTime = LocalDateTime.now();
 
-                // Update last polled time in the database
+                metricData.put("last_polled", currentTime.format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss")));
+
+                // Update metric group name which got polled and last polled time in the database
 
                 QueryUtility.getInstance().update(Constants.METRICS, new JsonObject().put("last_polled", currentTime),
-                                        new JsonObject().put("metric_object", objectData.getLong("object_id")))
+                                        new JsonObject().put("metric_group_name",metricData.getString("metric_group_name")).put("metric_object", objectData.getLong("object_id")))
                         .onSuccess(updated ->
                         {
                             if (updated)
@@ -209,6 +206,10 @@ public class Scheduler extends AbstractVerticle
                         {
                             logger.error("Failed to update last polled time for object ID : {} - {}", objectData.getLong("object_id"), error.getMessage());
                         });
+            }
+            else
+            {
+                logger.info("Finding qualified devices to proceed for polling");
             }
         }
         catch (Exception exception)

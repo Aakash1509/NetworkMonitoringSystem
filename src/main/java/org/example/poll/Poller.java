@@ -1,7 +1,6 @@
 package org.example.poll;
 import io.vertx.core.AbstractVerticle;
 import io.vertx.core.json.JsonObject;
-import org.example.Bootstrap;
 import org.example.Constants;
 import org.example.database.QueryUtility;
 import org.slf4j.Logger;
@@ -15,10 +14,11 @@ public class Poller extends AbstractVerticle
 
     public void start()
     {
-        Bootstrap.vertx.eventBus().<JsonObject>consumer(Constants.OBJECT_POLL, message ->
+        vertx.eventBus().<JsonObject>consumer(Constants.OBJECT_POLL, message ->
         {
             var pollingData = message.body();
 
+            //Fetching credentials of qualified devices
             var columns = List.of("profile_protocol","user_name","user_password","community","version");
 
             //Fetching device details through credential profile ID as that details will also be needed
@@ -53,7 +53,7 @@ public class Poller extends AbstractVerticle
     {
         logger.info("Started polling of ip: {}",pollingData.getString("ip"));
 
-        Bootstrap.vertx.executeBlocking(promise ->
+        vertx.executeBlocking(promise ->
         {
             try
             {
@@ -91,7 +91,7 @@ public class Poller extends AbstractVerticle
         {
             if (res.succeeded())
             {
-                Bootstrap.vertx.eventBus().request(Constants.FILE_WRITE,new JsonObject().put("ip",pollingData.getString("ip")).put("metric.group",pollingData.getString("metric.group.name")).put("metrics", res.result()).put("timestamp",timestamp),reply->{
+                vertx.eventBus().request(Constants.FILE_WRITE,new JsonObject().put("ip",pollingData.getString("ip")).put("metric.group",pollingData.getString("metric.group.name")).put("metrics", res.result()).put("timestamp",timestamp),reply->{
                     if (reply.succeeded())
                     {
                         logger.info("Metrics stored successfully: {}", reply.result().body());
