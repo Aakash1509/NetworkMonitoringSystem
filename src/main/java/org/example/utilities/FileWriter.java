@@ -53,7 +53,7 @@ public class FileWriter extends AbstractVerticle
                         return;
                     }
                 }
-                vertx.fileSystem().writeFile(Constants.BASE_DIRECTORY + "/" + String.format("%s_%s.txt", ip, timestamp),
+                vertx.fileSystem().writeFile(Constants.BASE_DIRECTORY + "/" + String.format("%s_%s.txt", ip, timestamp.replaceAll("[^0-9]", "")),
                         Buffer.buffer(new JsonObject().put("result", new JsonObject().put(metricName, metrics)).encodePrettily()),
                         writeResult ->
                         {
@@ -77,5 +77,4 @@ public class FileWriter extends AbstractVerticle
             }
         });
     }
-
 }
