@@ -54,7 +54,7 @@ public class Constants
 
     public static final String IP = "127.0.0.1";
 
-    public static final int ZMQ_PORT = 5555;
+    public static final int ZMQ_PORT = 5556;
 
     public static final int PERIODIC_INTERVAL = 5000;
 

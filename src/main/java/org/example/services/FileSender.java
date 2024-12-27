@@ -51,12 +51,12 @@ public class FileSender extends AbstractVerticle
                }
                else
                {
-                   logger.info("Current no polled data available");
+                   logger.info("Currently no polled data available");
                }
            }
            else
            {
-               logger.error("There are currently no polled devices with polling data: {}", result.cause().getMessage());
+               logger.error("Error occurred: {}", result.cause().getMessage());
            }
         });
     }

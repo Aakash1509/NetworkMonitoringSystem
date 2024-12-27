@@ -7,6 +7,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 public class Poller extends AbstractVerticle
 {
@@ -66,19 +67,25 @@ public class Poller extends AbstractVerticle
                 // Capture output from the Go executable
                 var output = new String(process.getInputStream().readAllBytes());
 
-                var exitCode = process.waitFor();
-
-                if (exitCode != 0)
+                if (process.waitFor(60, TimeUnit.SECONDS))
                 {
-                    logger.error("Go executable failed with error: {}", output.trim());
+                    if (process.exitValue() != 0)
+                    {
+                        logger.error("Go executable failed with error: {}", output.trim());
 
-                    promise.fail(new RuntimeException("Polling failed"));
+                        promise.fail(new RuntimeException("Polling failed"));
+                    }
+                    else
+                    {
+                        logger.info("Metrics collected: {}", output.trim());
+
+                        promise.complete(output.trim());
+                    }
                 }
                 else
                 {
-                    logger.info("Metrics collected: {}", output.trim());
-
-                    promise.complete(output.trim());
+                    // Timeout occurred
+                    process.destroy();
                 }
             }
             catch (Exception exception)
@@ -91,16 +98,13 @@ public class Poller extends AbstractVerticle
         {
             if (res.succeeded())
             {
-                vertx.eventBus().request(Constants.FILE_WRITE,new JsonObject().put("ip",pollingData.getString("ip")).put("metric.group",pollingData.getString("metric.group.name")).put("metrics", res.result()).put("timestamp",timestamp),reply->{
-                    if (reply.succeeded())
-                    {
-                        logger.info("Metrics stored successfully: {}", reply.result().body());
-                    }
-                    else
-                    {
-                        logger.error("Failed to store metrics for ip: {}", pollingData.getString("ip"), reply.cause());
-                    }
-                });
+                vertx.eventBus().send(
+                        Constants.FILE_WRITE,
+                        new JsonObject()
+                                .put("ip", pollingData.getString("ip"))
+                                .put("metric.group", pollingData.getString("metric.group.name"))
+                                .put("metrics", res.result())
+                                .put("timestamp", timestamp));
 
                 logger.info("Metrics fetched successfully for ip: {}", pollingData.getString("ip"));
             }

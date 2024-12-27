@@ -1,6 +1,5 @@
 package org.example.routes;
 import io.vertx.core.Future;
-import org.example.Bootstrap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import io.vertx.core.json.JsonObject;
@@ -13,6 +12,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Objects;
+
+import static org.example.Bootstrap.vertx;
 
 public class Provision
 {
@@ -120,11 +121,12 @@ public class Provision
                                     .put("metric_object", discoveryInfo.getLong("object_id"))));
                         });
 
+                        //If attaching any metric fails , no need to proceed further
                         return Future.all(metricFutures).map(discoveryInfo);
                     })
                     .onSuccess(result ->
                     {
-                        Bootstrap.vertx.eventBus().send(Constants.OBJECT_PROVISION,new JsonObject()
+                        vertx.eventBus().send(Constants.OBJECT_PROVISION,new JsonObject()
                                 .put("object_id",result.getLong("object_id"))
                                 .put("credential_profile", result.getLong("credential_profile"))
                                 .put("ip",result.getString("ip"))

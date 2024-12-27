@@ -58,14 +58,62 @@ public class Credentials implements CrudOperations
                 return;
             }
 
+            // Validate protocol-specific fields
+            if ("SSH".equals(protocol))
+            {
+                var userName = requestBody.getString("user.name");
+
+                var userPassword = requestBody.getString("user.password");
+
+                if (userName == null || userName.isEmpty() || userPassword == null || userPassword.isEmpty())
+                {
+                    context.response()
+                            .setStatusCode(500)
+                            .end(new JsonObject()
+                                    .put("status.code", 500)
+                                    .put("message", "For SSH protocol, both user.name and user.password are required")
+                                    .encodePrettily());
+                    return;
+                }
+            }
+            else if ("SNMP".equals(protocol))
+            {
+                var community = requestBody.getString("community");
+
+                var version = requestBody.getString("version");
+
+                if (community == null || community.isEmpty() || version == null || version.isEmpty())
+                {
+                    context.response()
+                            .setStatusCode(500)
+                            .end(new JsonObject()
+                                    .put("status.code", 500)
+                                    .put("message", "For SNMP protocol, both community and version are required")
+                                    .encodePrettily());
+                    return;
+                }
+            }
+            else
+            {
+                // Invalid protocol
+                context.response()
+                        .setStatusCode(500)
+                        .end(new JsonObject()
+                                .put("status.code", 500)
+                                .put("message", "Unsupported protocol: " + protocol)
+                                .encodePrettily());
+                return;
+            }
+
             var columns = List.of("profile_id");
 
-            QueryUtility.getInstance().get(Constants.CREDENTIALS, columns, new JsonObject().put("user_name", name))
+            //Checking if name is already present in Credentials table or not
+            QueryUtility.getInstance().get(Constants.CREDENTIALS, columns, new JsonObject().put("profile_name", name))
                     .compose(result ->
                     {
                         if (!result.containsKey("error"))
                         {
-                            // If discovery name already exists, return a failed future
+                            // If credential name already exists, return a failed future
                             return Future.failedFuture("Credential profile name should be unique");
                         }
                         else
@@ -138,6 +186,52 @@ public class Credentials implements CrudOperations
                     .end(new JsonObject()
                             .put("status.code",500)
                             .put("message","Please enter all the details of credentialID , username and protocol").encodePrettily());
+            return;
+        }
+        // Validate protocol-specific fields
+        if ("SSH".equals(protocol))
+        {
+            var userName = requestBody.getString("user.name");
+
+            var userPassword = requestBody.getString("user.password");
+
+            if (userName == null || userName.isEmpty() || userPassword == null || userPassword.isEmpty())
+            {
+                context.response()
+                        .setStatusCode(500)
+                        .end(new JsonObject()
+                                .put("status.code", 500)
+                                .put("message", "For SSH protocol, both user.name and user.password are required")
+                                .encodePrettily());
+                return;
+            }
+        }
+        else if ("SNMP".equals(protocol))
+        {
+            var community = requestBody.getString("community");
+
+            var version = requestBody.getString("version");
+
+            if (community == null || community.isEmpty() || version == null || version.isEmpty())
+            {
+                context.response()
+                        .setStatusCode(500)
+                        .end(new JsonObject()
+                                .put("status.code", 500)
+                                .put("message", "For SNMP protocol, both community and version are required")
+                                .encodePrettily());
+                return;
+            }
+        }
+        else
+        {
+            // Invalid protocol
+            context.response()
+                    .setStatusCode(500)
+                    .end(new JsonObject()
+                            .put("status.code", 500)
+                            .put("message", "Unsupported protocol: " + protocol)
+                            .encodePrettily());
             return;
         }
         try
@@ -321,7 +415,7 @@ public class Credentials implements CrudOperations
                     .setStatusCode(500)
                     .end(new JsonObject()
                             .put("status.code", 500)
-                            .put("message", "Server error in deleting credential profile")
+                            .put("message", "Server error in fetching credential profile")
                             .put("error", "Please enter a valid credential profile ID").encodePrettily());
         }
     }

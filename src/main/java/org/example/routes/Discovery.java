@@ -1,24 +1,28 @@
 package org.example.routes;
 
 import io.vertx.core.Future;
-import org.example.Constants;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import io.vertx.core.WorkerExecutor;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.Router;
 import io.vertx.ext.web.RoutingContext;
+import org.example.Constants;
 import org.example.database.QueryUtility;
 import org.example.util.Helper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 import static org.example.Bootstrap.vertx;
 
 public class Discovery implements CrudOperations
 {
     private static final Logger logger = LoggerFactory.getLogger(Discovery.class);
+
+    private static final WorkerExecutor executor = vertx.createSharedWorkerExecutor("discovery",5,60, TimeUnit.SECONDS);
 
     public void route(Router discoveryRouter)
     {
@@ -460,7 +464,7 @@ public class Discovery implements CrudOperations
                                 return Future.failedFuture("This discovery ID was not found in the database");
                             }
 
-                            List<String> values = List.of("object_id");
+                            var values = List.of("object_id");
 
                             // Then I will check whether device is provisioned already or not
                             return QueryUtility.getInstance().get(Constants.OBJECTS, values, new JsonObject().put("ip", deviceInfo.getString("ip")))

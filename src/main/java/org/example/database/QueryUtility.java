@@ -8,7 +8,6 @@ import io.vertx.pgclient.PgConnectOptions;
 import io.vertx.pgclient.PgPool;
 import io.vertx.sqlclient.PoolOptions;
 import io.vertx.sqlclient.Row;
-import io.vertx.sqlclient.RowSet;
 import io.vertx.sqlclient.Tuple;
 import org.example.Bootstrap;
 import org.example.Constants;
@@ -81,7 +80,7 @@ public class QueryUtility
                 .execute(Tuple.from(values), execute -> {
                     if (execute.succeeded())
                     {
-                        RowSet<Row> rows = execute.result();
+                        var rows = execute.result();
 
                         if (rows.size() > 0)
                         {
@@ -136,7 +135,7 @@ public class QueryUtility
                 .execute(execute->{
                     if(execute.succeeded())
                     {
-                        RowSet<Row> rows = execute.result();
+                        var rows = execute.result();
 
                         var response = new JsonArray();
 
@@ -192,13 +191,13 @@ public class QueryUtility
                 {
                     if (execute.succeeded())
                     {
-                        RowSet<Row> rows = execute.result();
+                        var rows = execute.result();
 
                         int count = rows.rowCount();
 
                         if(count==1)
                         {
-                            Row row = rows.iterator().next();
+                            var row = rows.iterator().next();
 
                             // Convert the Row into a JsonObject
                             var response = new JsonObject();
@@ -215,7 +214,7 @@ public class QueryUtility
                         }
                         else if (count>1)
                         {
-                            JsonArray rowsArray = new JsonArray();
+                            var rowsArray = new JsonArray();
 
                             for (Row row : rows)
                             {

@@ -4,11 +4,12 @@ import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Future;
 import io.vertx.core.Promise;
 import io.vertx.core.json.JsonArray;
+import io.vertx.core.json.JsonObject;
 import org.example.Constants;
+import org.example.database.QueryUtility;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import io.vertx.core.json.JsonObject;
-import org.example.database.QueryUtility;
+
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -45,21 +46,8 @@ public class Scheduler extends AbstractVerticle
 
             //Will fetch provisioned devices from database as soon as this verticle deploys
             getDevices()
-                    .onSuccess(v->
-                    {
-                        logger.info("Provisioned devices in database fetched successfully.");
-
-                        vertx.setPeriodic(Constants.PERIODIC_INTERVAL,id-> checkAndPreparePolling());
-
-                    })
-                    .onFailure(error->
-                    {
-                        logger.info("Failed to fetch provisioned devices : {}",error.getMessage());
-
-                        //If initially there are no provisioned devices still I need to keep periodically checking as devices can be provisioned afterwards
-
-                        vertx.setPeriodic(Constants.PERIODIC_INTERVAL,id-> checkAndPreparePolling());
-                    });
+                    .onComplete(v->
+                            vertx.setPeriodic(Constants.PERIODIC_INTERVAL,id-> checkAndPreparePolling()));
         }
         catch (Exception exception)
         {
@@ -75,34 +63,28 @@ public class Scheduler extends AbstractVerticle
         QueryUtility.getInstance().getAll(Constants.OBJECTS)
                 .onSuccess(objectsArray->
                 {
-                    if (objectsArray.isEmpty())
+                    logger.info("Fetched {} rows from 'objects' table", objectsArray.size());
+
+                    for (int i = 0; i < objectsArray.size(); i++)
                     {
-                        promise.fail("There are no provisioned devices currently");
+                        // Object will contain information like object_id, credential_profile, ip, hostname and device_type
+                        var object = objectsArray.getJsonObject(i);
+
+                        var objectId = object.getLong("object_id");
+
+                        fetchMetricData(objectId)
+                                .onSuccess(metrics ->
+                                {
+                                    var deviceMetrics = new JsonObject()
+                                            .put("device", object)
+                                            .put("metrics", metrics);
+
+                                    pollDevices.put(objectId, deviceMetrics);
+                                })
+                                .onFailure(err -> logger.error("Failed to fetch metrics {}: {}", objectId, err.getMessage()));
                     }
-                    else
-                    {
-                        logger.info("Fetched {} rows from 'objects' table", objectsArray.size());
 
-                        for (int i = 0; i < objectsArray.size(); i++)
-                        {
-                            // Object will contain information like object_id, credential_profile, ip, hostname and device_type
-                            var object = objectsArray.getJsonObject(i);
-
-                            var objectId = object.getLong("object_id");
-
-                            fetchMetricData(objectId)
-                                    .onSuccess(metrics ->
-                                    {
-                                        var deviceMetrics = new JsonObject()
-                                                .put("device", object)
-                                                .put("metrics", metrics);
-
-                                        pollDevices.put(objectId, deviceMetrics);
-                                    })
-                                    .onFailure(err -> logger.error("Failed to fetch metrics {}: {}", objectId, err.getMessage()));
-                        }
-                        promise.complete();
-                    }
+                    promise.complete();
                 })
                 .onFailure(error->
                 {

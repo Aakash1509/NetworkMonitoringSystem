@@ -39,9 +39,7 @@ public class Helper
     {
         try
         {
-            var processBuilder = new ProcessBuilder("ping","-c 5",ip);
-
-            var process = processBuilder.start();
+            var process = new ProcessBuilder("ping","-c 5",ip).start();
 
             var reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
 
@@ -118,7 +116,7 @@ public class Helper
             deviceInfo.put(Constants.EVENT_TYPE,Constants.DISCOVER);
 
             // Spawning a process
-            Process process = new ProcessBuilder(Constants.PLUGIN_PATH, deviceInfo.encode())
+            var process = new ProcessBuilder(Constants.PLUGIN_PATH, deviceInfo.encode())
                     .redirectErrorStream(true).start();
 
             // Wait for the process to complete within 60 seconds
@@ -141,15 +139,15 @@ public class Helper
             }
 
             // Output from the Go executable
-            BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+            var reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
 
-            String output = reader.readLine();
+            var output = reader.readLine();
 
             logger.info("Output from Go executable: {}", output);
 
             // Parse the output and update the deviceInfo JSON object
 
-            JsonObject result = new JsonObject(output);
+            var result = new JsonObject(output);
 
             deviceInfo.put("credential_profile", result.getLong("credential.profile.id"));
 

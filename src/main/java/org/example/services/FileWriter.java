@@ -46,10 +46,6 @@ public class FileWriter extends AbstractVerticle
                     catch (Exception exception)
                     {
                         logger.error("Failed to parse metrics string: {}", exception.getMessage());
-
-                        message.fail(1, "Invalid JSON format for metrics");
-
-                        return;
                     }
                 }
 
@@ -62,25 +58,23 @@ public class FileWriter extends AbstractVerticle
                     if (existsResult.succeeded() && existsResult.result())
                     {
                         // File exists, append the data
-                        appendToFile(filePath, metricName, finalMetrics, ip, message);
+                        appendToFile(filePath, metricName, finalMetrics, ip);
                     }
                     else
                     {
                         // File does not exist, create a new one
-                        writeFile(filePath, metricName, finalMetrics, ip, message);
+                        writeFile(filePath, metricName, finalMetrics, ip);
                     }
                 });
             }
             catch (Exception exception)
             {
                 logger.error("Exception occurred while handling file write: {}", exception.getMessage(), exception);
-
-                message.fail(1, "Exception occurred: " + exception.getMessage());
             }
         });
     }
 
-    private void appendToFile(String filePath, String metricName, Object metrics, String ip, io.vertx.core.eventbus.Message<JsonObject> message)
+    private void appendToFile(String filePath, String metricName, Object metrics, String ip)
     {
         vertx.fileSystem().readFile(filePath, readResult ->
         {
@@ -100,26 +94,22 @@ public class FileWriter extends AbstractVerticle
                 {
                     if (writeResult.succeeded())
                     {
-                        message.reply("Data appended successfully to: " + filePath);
+                        logger.info("Data appended successfully to: {}", filePath);
                     }
                     else
                     {
                         logger.error("Failed to append data to file: {}", writeResult.cause().getMessage());
-
-                        message.fail(1, "Failed to append data: " + writeResult.cause().getMessage());
                     }
                 });
             }
             else
             {
                 logger.error("Failed to read the existing file for appending: {}", readResult.cause().getMessage());
-
-                message.fail(1, "Failed to read the existing file: " + readResult.cause().getMessage());
             }
         });
     }
 
-    private void writeFile(String filePath, String metricName, Object metrics, String ip, io.vertx.core.eventbus.Message<JsonObject> message)
+    private void writeFile(String filePath, String metricName, Object metrics, String ip)
     {
         vertx.fileSystem().writeFile(filePath,
                 Buffer.buffer(new JsonObject()
@@ -130,13 +120,11 @@ public class FileWriter extends AbstractVerticle
                 {
                     if (writeResult.succeeded())
                     {
-                        message.reply("File written successfully: " + filePath);
+                        logger.info("File written successfully: {}", filePath);
                     }
                     else
                     {
                         logger.error("Failed to write file: {}", writeResult.cause().getMessage());
-
-                        message.fail(1, "Failed to write file: " + writeResult.cause().getMessage());
                     }
                 });
     }
